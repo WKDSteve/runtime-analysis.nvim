@@ -1,4 +1,5 @@
 ---@module 'runtime-analysis.startup'
+-- handrolled-ok: stall measurement on a heartbeat (lateness of the tick), not a throttle
 ---@brief Main-loop stall detection, on one clock with a timeline of what ran.
 ---@description
 --- Answers "why did Neovim freeze for half a second just now", and does it in
