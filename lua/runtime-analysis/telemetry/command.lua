@@ -548,6 +548,62 @@ local function export(path, pdf_callback)
   return target
 end
 
+---@class RA.Telemetry.ReportCtx
+---@field lines string[]      The Markdown report
+---@field path string         Where the "file" style writes it
+---@field kit_lines string[]  The float's own lines (also the fallback of the rendered styles)
+---@field title string
+---@field show_opts table     Refresh/drilldown wiring for every "kit" float
+---@field open_html fun()     Write and open the HTML dashboard
+
+---@internal
+---One entry per `report_style` that `resolve_report_style` can return. A style
+---that fails to open falls back to the kit float, which is why the context
+---carries both line sets.
+---@type table<string, fun(c: RA.Telemetry.ReportCtx)>
+local REPORT_STYLES = {
+  kit = function(c)
+    show(c.kit_lines, c.title, c.show_opts)
+  end,
+  mdview = function(c)
+    local ok, err = mdview_renderer.open(c.lines, c.path)
+    if not ok then
+      notify.warn(("mdview open failed (%s) — falling back to the kit float"):format(err))
+      show(c.kit_lines, c.title, c.show_opts)
+    end
+  end,
+  ["preview-tab"] = function(c)
+    -- `lines`, not `kit_lines`: this is the Markdown report, rendered by
+    -- mdview's conceal rather than flattened for a float. The float's own
+    -- lines are what the fallback below uses, which is the whole reason
+    -- both are passed in.
+    local ok, err = preview_tab_renderer.open(c.lines, c.title)
+    if not ok then
+      notify.warn(("in-editor preview failed (%s) — falling back to the kit float"):format(err))
+      show(c.kit_lines, c.title, c.show_opts)
+    end
+  end,
+  file = function(c)
+    local ok, err = report_file.write(c.path, c.lines)
+    if ok then
+      notify.info("wrote " .. c.path)
+    else
+      notify.error("failed to write report: " .. tostring(err))
+    end
+  end,
+  html = function(c)
+    c.open_html()
+  end,
+}
+
+---Names of the report styles `:RATelemetry open` can dispatch to, sorted.
+---@return string[]
+function M.report_styles()
+  local out = vim.tbl_keys(REPORT_STYLES)
+  table.sort(out)
+  return out
+end
+
 ---`:RATelemetry open [ns]` — render + hand the report to whatever
 ---`report_style` resolves to. Always forces a flush first: the honest-limits
 ---note in the roadmap doc is explicit that the browser shows the *last*
@@ -615,34 +671,16 @@ local function open_report(namespace)
       end
     end
 
-    if style == "mdview" then
-      local ok, err = mdview_renderer.open(lines, path)
-      if not ok then
-        notify.warn(("mdview open failed (%s) — falling back to the kit float"):format(err))
-        show(kit_lines, title, show_opts)
-      end
-    elseif style == "preview-tab" then
-      -- `lines`, not `kit_lines`: this is the Markdown report, rendered by
-      -- mdview's conceal rather than flattened for a float. The float's own
-      -- lines are what the fallback below uses, which is the whole reason
-      -- both are passed in.
-      local ok, err = preview_tab_renderer.open(lines, title)
-      if not ok then
-        notify.warn(("in-editor preview failed (%s) — falling back to the kit float"):format(err))
-        show(kit_lines, title, show_opts)
-      end
-    elseif style == "file" then
-      local ok, err = report_file.write(path, lines)
-      if ok then
-        notify.info("wrote " .. path)
-      else
-        notify.error("failed to write report: " .. tostring(err))
-      end
-    elseif style == "html" then
-      open_html()
-    else -- "kit"
-      show(kit_lines, title, show_opts)
-    end
+    -- An unrecognized style opens the kit float, as the final `else` always did.
+    local run = REPORT_STYLES[style] or REPORT_STYLES.kit
+    run({
+      lines = lines,
+      path = path,
+      kit_lines = kit_lines,
+      title = title,
+      show_opts = show_opts,
+      open_html = open_html,
+    })
   end
 
   if namespace and namespace ~= "" then

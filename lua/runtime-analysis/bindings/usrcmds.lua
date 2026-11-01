@@ -547,6 +547,35 @@ local function send_current_buffer(ra, asked_block)
   end)
 end
 
+---@class RA.PickOneOpts
+---@field title string                              Prompt / float title
+---@field format_item? fun(item: any): string
+---@field on_select fun(choice: any)
+
+---@internal
+---"Pick exactly one thing": ui.kit's chooser when installed, `vim.ui.select`
+---otherwise. `respect_override` defers to the reader's own configured picker
+---(telescope/fzf-lua/snacks/...) when one has replaced `vim.ui.select`, same as
+---the plain call would have -- kit's own chooser is only the fallback when
+---nothing else is installed. One adapter for every caller, so the two paths
+---cannot drift apart per command.
+---@param items any[]
+---@param opts RA.PickOneOpts
+local function pick_one(items, opts)
+  local ok_kit, kit = pcall(require, "ui.kit")
+  if ok_kit then
+    kit.select({
+      selection = items,
+      title = opts.title,
+      format_item = opts.format_item,
+      respect_override = true,
+      on_select = opts.on_select,
+    })
+  else
+    vim.ui.select(items, { prompt = opts.title, format_item = opts.format_item }, opts.on_select)
+  end
+end
+
 ---`vim.ui.select` rather than the quickfix list docmap.nvim's own
 ---commands favor — this is "pick exactly one thing and act on it", not
 ---"here are several locations to jump through", so the native
@@ -590,25 +619,11 @@ local function browse_history(ra)
     ra.open_request({ ("%s %s"):format(choice.method, choice.url), "" })
   end
 
-  local ok_kit, kit = pcall(require, "ui.kit")
-  if ok_kit then
-    -- respect_override: defer to the reader's own configured picker
-    -- (telescope/fzf-lua/snacks/...) when one has replaced vim.ui.select,
-    -- same as the plain vim.ui.select call below would have — kit's own
-    -- chooser is only the fallback when nothing else is installed.
-    kit.select({
-      selection = entries,
-      title = "runtime-analysis: request history (newest first)",
-      format_item = format_item,
-      respect_override = true,
-      on_select = on_select,
-    })
-  else
-    vim.ui.select(entries, {
-      prompt = "runtime-analysis: request history (newest first)",
-      format_item = format_item,
-    }, on_select)
-  end
+  pick_one(entries, {
+    title = "runtime-analysis: request history (newest first)",
+    format_item = format_item,
+    on_select = on_select,
+  })
 end
 
 ---`:RA env [name]`. With `name`, selects it directly
@@ -653,12 +668,7 @@ local function select_environment(name)
     end
   end
 
-  local ok_kit, kit = pcall(require, "ui.kit")
-  if ok_kit then
-    kit.select({ selection = names, title = prompt, respect_override = true, on_select = on_select })
-  else
-    vim.ui.select(names, { prompt = prompt }, on_select)
-  end
+  pick_one(names, { title = prompt, on_select = on_select })
 end
 
 ---`:RA import` — parses a `curl` command line into a
