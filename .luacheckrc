@@ -31,4 +31,6 @@ exclude_files = {
   -- Pure `---@meta` LuaCATS annotation scaffolding: `local x ---@type T` /
   -- `return {}` patterns luacheck has no way to know are intentional.
   "**/@types/**",
+  -- Gitignored dependency checkouts (lib.nvim, ...): their code is not this repo's to lint.
+  ".deps/**",
 }
