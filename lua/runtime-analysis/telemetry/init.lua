@@ -1242,6 +1242,8 @@ function M.auto(opts)
   t.start({
     profile_args = opts.profile_args or nil,
     time = opts.timing or nil,
+    -- on unless asked off: the Errors column stays empty otherwise (a raise costs one pcall)
+    errors = opts.errors ~= false or nil,
   })
   return t
 end

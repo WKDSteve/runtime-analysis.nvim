@@ -260,6 +260,7 @@
 ---@field deep? boolean                                 # wrap_loaded(main) instead of just its façade (default false)
 ---@field profile_args? boolean
 ---@field timing? boolean
+---@field errors? boolean                               # count raised errors (default true; false: off)
 ---@field persist? boolean                              # forwarded to new() (default true)
 ---@field dir? string                                   # forwarded to new() -- cache directory override
 ---@field module_filter? fun(name: string): boolean      # default: excludes `@types` modules
@@ -302,6 +303,7 @@
 ---@field deep? boolean
 ---@field profile_args? boolean
 ---@field timing? boolean
+---@field errors? boolean                               # forwarded to auto(): count raised errors (default true)
 ---@field persist? boolean                              # forwarded to auto()/new() (default true)
 ---@field dir? string                                   # forwarded to auto()/new() -- cache directory override
 

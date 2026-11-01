@@ -2820,6 +2820,37 @@ return function(H)
   end
 
   do
+    -- errors are counted by default (the Errors column was empty everywhere); `errors = false` turns it off
+    package.loaded["fakeauto_err"] = {
+      boom = function()
+        error("boom", 0)
+      end,
+    }
+    local inst =
+      telemetry.auto({ namespace = ns("auto_errors"), main = "fakeauto_err", persist = false })
+    pcall(package.loaded["fakeauto_err"].boom)
+    H.eq(inst.report().entries[1].errors, 1, "auto(): a raise is counted without asking")
+    inst.stop()
+    inst.unwrap()
+    package.loaded["fakeauto_err"] = {
+      boom = function()
+        error("boom", 0)
+      end,
+    }
+    local off = telemetry.auto({
+      namespace = ns("auto_errors_off"),
+      main = "fakeauto_err",
+      errors = false,
+      persist = false,
+    })
+    pcall(package.loaded["fakeauto_err"].boom)
+    H.eq(off.report().entries[1].errors or 0, 0, "errors = false: not counted")
+    off.stop()
+    off.unwrap()
+    package.loaded["fakeauto_err"] = nil
+  end
+
+  do
     -- lua/<main>/init.lua reachable as both "<main>" and "<main>.init" --
     -- gating the shallow path on the bare name alone would silently skip a
     -- plugin that happened to load via the ".init" form.
