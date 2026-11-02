@@ -67,7 +67,8 @@ local config_validate = require("runtime-analysis.config.validate")
 -- `ExtraTarget` accepts -- see `validate_opts` below, called once at the top
 -- of `M.setup()`.
 local KNOWN_LAZY_OPTS = { "plugins", "lib_nvim", "extra" }
-local KNOWN_PLUGIN_OPTS = { "namespace", "deep", "profile_args", "timing", "errors", "persist", "dir" }
+local KNOWN_PLUGIN_OPTS =
+  { "namespace", "deep", "profile_args", "timing", "errors", "persist", "dir" }
 local KNOWN_EXTRA_OPTS =
   { "namespace", "mains", "deep", "profile_args", "timing", "errors", "persist", "dir", "wrap_at" }
 local KNOWN_LIB_NVIM_OPTS = { "profile_args", "timing", "persist", "dir" }
