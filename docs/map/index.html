@@ -8731,6 +8731,9 @@ li:hover>.marki,tr:hover .marki{opacity:.8}
   // =====================================================================
   var kwpop = document.getElementById("kwpop");
   var kwAnchor = null, kwOpenTimer = null, kwCloseTimer = null;
+  // Focusing a keyword by keyboard scrolls it into view; that scroll arrives AFTER the
+  // card opened and must not take it down again (a wheel or touch scroll still does).
+  var kwFocusScrollUntil = 0;
   var KW_DWELL = 260;
 
   function kwClearTimers(){
@@ -8842,6 +8845,9 @@ li:hover>.marki,tr:hover .marki{opacity:.8}
       return;
     }
     if(!kwAnchor && !kwOpenTimer) return;
+    // The content scrolled under a resting pointer (the focus scrolled its keyword into view): the
+    // browser reports a mouseover on whatever is under it now, which is not the reader leaving.
+    if(Date.now() < kwFocusScrollUntil) return;
     // Same grace period on the way out as the annotation popup, and for the
     // same reason: the pointer has to be able to travel into the card to
     // reach the reference link.
@@ -8855,7 +8861,7 @@ li:hover>.marki,tr:hover .marki{opacity:.8}
   // above is kept at full opacity while focused.
   document.addEventListener("focusin", function(ev){
     var el = ev.target.closest && ev.target.closest("[data-kw]");
-    if(el){ kwClearTimers(); kwOpen(el); }
+    if(el){ kwClearTimers(); kwFocusScrollUntil = Date.now() + 500; kwOpen(el); }
     else if(!(ev.target.closest && ev.target.closest("#kwpop"))) kwClose();
   });
 
@@ -8866,6 +8872,8 @@ li:hover>.marki,tr:hover .marki{opacity:.8}
   window.addEventListener("scroll", function(ev){
     if(ev.target && ev.target.nodeType === 1 && ev.target.closest &&
        (ev.target.closest("#kwpop") || ev.target.closest("#sigpop"))) return;
+    // the scroll the focus itself caused: keep the card, follow its keyword
+    if(kwAnchor && Date.now() < kwFocusScrollUntil){ kwPlace(kwAnchor); return; }
     kwClose();
   }, true);
   window.addEventListener("resize", kwClose);
