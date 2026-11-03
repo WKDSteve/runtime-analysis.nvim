@@ -1388,6 +1388,13 @@ stop with :RATelemetry stop.
   last flush interval before midnight land in the previous day.
 - Timing reports `min`/`mean`/`max`. No `p95` — that needs a histogram per
   function, which is a different size/accuracy trade-off than this module makes.
+- A replacement that merely **keeps our wrapper for a later restore** is not
+  counted. `attach` leaves a field alone when the function now in it reaches the
+  wrapper through its upvalues (or one level into a captured table), because
+  overwriting such a re-wrap would loop forever. A static scan cannot tell
+  "calls it" from "holds it", so `P._orig = C.f; function P.f() return P.render() end;
+  C.f = P.f` looks like a re-wrap: the call still reaches `P.f`, but `P.f` shows
+  no calls and `is_wrapped` is false. Deliberate: a wrong count beats 100 % CPU.
 
 ## Not implemented
 

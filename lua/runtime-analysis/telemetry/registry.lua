@@ -255,6 +255,9 @@ local function references(fn, target, depth, seen)
     -- tables or into the functions found there, so capturing a big table
     -- (a module table, `package.loaded`) costs one shallow pass and never
     -- walks a whole object graph. `next` is raw, so no metamethod runs.
+    -- Known limit: a module table holding the wrapper only to restore it later
+    -- (`P._orig = C.f`) counts as a reference too, so that replacement stays
+    -- uncounted (telemetry/README.md, "Honest limits").
     if type(value) == "table" and not seen[value] then
       seen[value] = depth
       for _, v in next, value do
