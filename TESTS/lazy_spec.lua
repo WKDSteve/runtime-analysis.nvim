@@ -182,9 +182,16 @@ return function(H)
     H.eq(#deep.wrapped_keys(), 4, "rescan() looks at once")
 
     local instances = #telemetry.instances()
+    local real_start, starts = deep.start, 0
+    deep.start = function(...)
+      starts = starts + 1
+      return real_start(...)
+    end
     lazy_adapter.rescan()
     H.eq(#deep.wrapped_keys(), 4, "looking again wraps nothing twice")
     H.eq(#telemetry.instances(), instances, "and creates no instance")
+    H.eq(starts, 0, "and does not restart the flush timer of the instance")
+    deep.start = real_start
 
     -- A namespace that was stopped on purpose is not started again by a look.
     deep.stop()

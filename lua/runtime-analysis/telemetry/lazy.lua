@@ -170,12 +170,17 @@ function M.rescan()
     local settings = plugin.settings
     local inst = telemetry.get(settings.namespace)
     if inst and inst.is_running() then
+      local before = #inst.wrapped_keys()
       inst.wrap_loaded(plugin.main, { module_filter = telemetry.default_module_filter })
-      inst.start({
-        profile_args = settings.profile_args or nil,
-        time = settings.timing or nil,
-        errors = settings.errors ~= false or nil,
-      })
+      -- Only for something new: `start` attaches every target again and restarts the flush timer,
+      -- so a look that finds nothing must not push the next flush back.
+      if #inst.wrapped_keys() > before then
+        inst.start({
+          profile_args = settings.profile_args or nil,
+          time = settings.timing or nil,
+          errors = settings.errors ~= false or nil,
+        })
+      end
     end
   end
 end
