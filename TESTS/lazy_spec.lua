@@ -109,6 +109,132 @@ return function(H)
   for _, name in ipairs({ "fakelazy_early", "fakelazy_late" }) do
     package.loaded[name] = nil
   end
+
+  -- A plugin whose real code loads after its own LazyLoad (lsp.nvim: only its pack is there when
+  -- the event fires, the other 120 modules come during startup). Without another look those
+  -- modules stay unwrapped for the whole session.
+  do
+    local function calls_of(inst, key)
+      for _, row in ipairs(inst.report().entries) do
+        if row.key == key then
+          return row.calls
+        end
+      end
+      return 0
+    end
+
+    local plugin_deep = { "someorg/deep.nvim" }
+    local plugin_flat = { "someorg/flat.nvim" }
+    package.loaded["lazy.core.config"] = { plugins = { deep = plugin_deep, flat = plugin_flat } }
+    package.loaded["lazy.core.loader"] = {
+      get_main = function(plugin)
+        return plugin == plugin_deep and "fakelazy_deep" or "fakelazy_flat"
+      end,
+    }
+    package.loaded["fakelazy_deep"] = { root = function() end }
+    package.loaded["fakelazy_flat"] = { root = function() end }
+
+    local ns_deep, ns_flat = ns("deep"), ns("flat")
+    lazy_adapter.setup({
+      plugins = {
+        ["someorg/deep.nvim"] = {
+          namespace = ns_deep,
+          persist = false,
+          deep = true,
+          profile_args = true,
+        },
+        ["someorg/flat.nvim"] = { namespace = ns_flat, persist = false, deep = false },
+      },
+      lib_nvim = false,
+    })
+    local deep, flat = assert(telemetry.get(ns_deep)), assert(telemetry.get(ns_flat))
+    H.eq(#deep.wrapped_keys(), 1, "only what is loaded at the event is wrapped")
+
+    -- The first look comes after startup, behind what the config defers itself.
+    local later = { work = function(_) end }
+    package.loaded["fakelazy_deep.later"] = later
+    package.loaded["fakelazy_flat.later"] = { work = function() end }
+    if vim.v.vim_did_enter == 0 then
+      vim.api.nvim_exec_autocmds("VimEnter", {})
+    end
+    H.ok(
+      vim.wait(1000, function()
+        return #deep.wrapped_keys() == 2
+      end),
+      "a module loaded during startup is wrapped after VimEnter"
+    )
+    later.work("a")
+    H.eq(calls_of(deep, "later.work"), 1, "and its calls are counted, on the running instance")
+    H.ok(deep.report().modes.args, "with the settings of the plugin")
+    H.eq(#flat.wrapped_keys(), 1, "a plugin that asked for its facade only stays at its facade")
+
+    -- A module first required on a key press: the next idle moment finds it.
+    local on_key = { work = function() end }
+    package.loaded["fakelazy_deep.on_key"] = on_key
+    vim.api.nvim_exec_autocmds("CursorHold", {})
+    H.eq(#deep.wrapped_keys(), 3, "an idle moment wraps what was required since")
+
+    -- Idle moments come often: at most one of them in a while does the work.
+    package.loaded["fakelazy_deep.soon"] = { work = function() end }
+    vim.api.nvim_exec_autocmds("CursorHold", {})
+    H.eq(#deep.wrapped_keys(), 3, "the next idle moment right after it does nothing")
+    lazy_adapter.rescan()
+    H.eq(#deep.wrapped_keys(), 4, "rescan() looks at once")
+
+    local instances = #telemetry.instances()
+    lazy_adapter.rescan()
+    H.eq(#deep.wrapped_keys(), 4, "looking again wraps nothing twice")
+    H.eq(#telemetry.instances(), instances, "and creates no instance")
+
+    -- A namespace that was stopped on purpose is not started again by a look.
+    deep.stop()
+    package.loaded["fakelazy_deep.stopped"] = { work = function() end }
+    lazy_adapter.rescan()
+    H.eq(deep.is_running(), false, "a stopped namespace stays stopped")
+    H.eq(#deep.wrapped_keys(), 4, "and nothing is added to it")
+
+    flat.stop()
+    deep.unwrap()
+    flat.unwrap()
+    for name in pairs(package.loaded) do
+      if name:match("^fakelazy_") then
+        package.loaded[name] = nil
+      end
+    end
+  end
+
+  -- What a report of 0 calls can mean (mdview.nvim: 223 functions, no call). A command that
+  -- reaches its function through the module is counted however early it was bound; only a
+  -- function saved before the wrap is out of sight.
+  do
+    local module = { show = function() end, kept = function() end }
+    package.loaded["fakelazy_cmd"] = module
+    local through_the_module = function()
+      module.show()
+    end
+    local saved = module.kept
+
+    local inst = assert(telemetry.auto({
+      namespace = ns("cmd"),
+      main = "fakelazy_cmd",
+      deep = true,
+      persist = false,
+    }))
+    through_the_module()
+    saved()
+
+    local counted = {}
+    for _, row in ipairs(inst.report().entries) do
+      counted[row.key] = row.calls
+    end
+    H.eq(counted.show, 1, "a command bound before the wrap is counted through the module")
+    H.eq(counted.kept, nil, "a function saved before the wrap is not")
+
+    inst.stop()
+    inst.unwrap()
+    package.loaded["fakelazy_cmd"] = nil
+  end
+
   package.loaded["lazy.core.config"] = nil
   package.loaded["lazy.core.loader"] = nil
 end

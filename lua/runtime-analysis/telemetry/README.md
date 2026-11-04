@@ -359,14 +359,27 @@ rather than an empty namespace.
 
 ### `telemetry.setup_all` — bulk backup + reset + re-wrap + restart
 
-`M.setup()`'s catch-up scan wraps a plugin's loaded modules exactly once —
-either right away (already loaded when `setup()` ran) or on its own `User
-LazyLoad`. A submodule that plugin `require`s *later* (a command handler
-pulled in on first use, a UI module loaded on first keypress) is never
-retroactively wrapped: not because `profile_args` is off, but because
-nothing ever installed a wrapper around it at all. `:RATelemetrySetupAll` /
-`:RATelemetrySetupAllFull` exist to re-scan, so a function that has been
-silently invisible all session joins the wrap the next time either runs.
+`M.setup()`'s catch-up scan wraps a plugin's loaded modules right away (already
+loaded when `setup()` ran) or on its own `User LazyLoad`. The event only says
+that the plugin's `config()` ended, so a `deep` plugin is looked at again: once
+after `VimEnter`, and in an idle moment (`CursorHold`, at most every 30 seconds)
+when `package.loaded` has grown. `lazy.rescan()` looks at once. A namespace that
+was stopped or disabled stays that way, and only new modules are wrapped.
+A plugin without `deep` stays at its façade, and an `extra` target is not looked
+at again: there `:RATelemetrySetupAll` / `:RATelemetrySetupAllFull` or
+`:RATelemetry setup <ns>` re-scan, so a function that has been invisible joins
+the wrap the next time one of them runs.
+
+**Reading a low number.** A namespace with functions but 0 calls does not say the
+wrap failed. A command or autocmd that reaches its function through the module
+(`log.show_ring()`) is counted however early it was bound; only a function saved
+in a local or passed as a callback before the wrap is out of sight. So check one
+call you know you made before calling a plugin unused.
+
+**One module tree, one namespace.** Two targets that wrap the same tree both count
+every call. An `extra` prefix that is also the `main` of a plugin (`lsp`, when
+`lsp.nvim` is installed and the config has no `lua/lsp`) takes that plugin's calls
+into the config's namespace. Name only prefixes the config really owns.
 
 ```lua
 local lazy = require("runtime-analysis.telemetry.lazy")

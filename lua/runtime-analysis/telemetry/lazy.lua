@@ -40,6 +40,14 @@
 --- this same mechanism directly (see lib.nvim's own `config/telemetry.lua`,
 --- before this module existed, for what that ordering requirement cost).
 ---
+--- ANOTHER LOOK, NOT JUST THE ONE AT THE EVENT
+--- The event says the plugin's `config()` ended, not that its code is loaded.
+--- lsp.nvim loads at startup with only its pack required: 6 functions were
+--- wrapped while 126 modules followed, and the numbers looked like a plugin
+--- nobody uses. So a `deep` plugin is looked at again after VimEnter and in an
+--- idle moment once `package.loaded` has grown, at most every half minute. Only
+--- what is new is wrapped; a namespace that was stopped on purpose stays stopped.
+---
 --- `extra`: TARGETS NO PLUGIN MANAGER CAN SEE
 --- `plugins` above can only ever describe things lazy.nvim resolves. The
 --- reader's own Neovim config is not one of them — it has no repo, no spec,
@@ -116,6 +124,14 @@ end
 
 local M = {}
 
+---An idle moment looks again at most this often. Counting `package.loaded` is cheap,
+---walking it for every plugin is not, and CursorHold comes all the time.
+local RESCAN_EVERY_MS = 30000
+
+---The `deep` plugins wrapped so far, for another look: plugin name -> main and settings.
+---@type table<string, { main: string, settings: RA.Telemetry.LazyPluginOpts }>
+local followed = {}
+
 ---The `opts` handed to the most recent `M.setup()` call -- kept around so
 ---`M.candidates()` (in turn, `:RATelemetrySetupAll`/`:RATelemetrySetupAllFull`,
 ---telemetry/setup_all.lua) can reuse the exact same plugin policy instead of
@@ -140,6 +156,28 @@ local function auto_wrap(namespace, main, settings)
     persist = settings.persist,
     dir = settings.dir,
   })
+end
+
+---Wrap what a `deep` plugin has loaded since the last look, and give it the settings of the
+---plugin. Looks up the instance each time: `:RATelemetrySetupAll` replaces it. A namespace that
+---is not running was stopped or disabled on purpose, and nothing here starts it again.
+---
+---Reaches modules the plugin requires after its `User LazyLoad`, with the limit every wrap has: a
+---consumer that saved a function in a local before this ran holds the raw one.
+function M.rescan()
+  local telemetry = require("runtime-analysis.telemetry")
+  for _, plugin in pairs(followed) do
+    local settings = plugin.settings
+    local inst = telemetry.get(settings.namespace)
+    if inst and inst.is_running() then
+      inst.wrap_loaded(plugin.main, { module_filter = telemetry.default_module_filter })
+      inst.start({
+        profile_args = settings.profile_args or nil,
+        time = settings.timing or nil,
+        errors = settings.errors ~= false or nil,
+      })
+    end
+  end
 end
 
 ---Every prefix of one `extra` target that is currently loaded. Empty when
@@ -296,6 +334,7 @@ function M.setup(opts)
 
   ---@type table<string, boolean>
   local started = {}
+  followed = {}
 
   if opts.lib_nvim then
     started["lib.nvim"] = true
@@ -333,6 +372,9 @@ function M.setup(opts)
     -- autocmd below to pick up once it actually loads.
     if auto_wrap(settings.namespace, main, settings) then
       started[plugin_name] = true
+      if settings.deep then
+        followed[plugin_name] = { main = main, settings = settings }
+      end
     end
   end
 
@@ -352,6 +394,41 @@ function M.setup(opts)
     pattern = "LazyLoad",
     group = autocmd.group("runtime_analysis_telemetry_lazyload", true),
     desc = "runtime-analysis.telemetry: wrap+start an instance for each plugin as it loads",
+  })
+
+  local group = autocmd.group("runtime_analysis_telemetry_rescan", true)
+
+  -- Scheduled for the same reason as `extra`: behind what a config defers from its own VimEnter.
+  if vim.v.vim_did_enter == 1 then
+    vim.schedule(M.rescan)
+  else
+    autocmd.create("VimEnter", function()
+      vim.schedule(M.rescan)
+    end, {
+      once = true,
+      group = group,
+      desc = "runtime-analysis.telemetry: wrap what the plugins loaded during startup",
+    })
+  end
+
+  local looked_at, modules = nil, nil
+  autocmd.create("CursorHold", function()
+    local now = vim.uv.now()
+    if looked_at and now - looked_at < RESCAN_EVERY_MS then
+      return
+    end
+    looked_at = now
+    local count = 0
+    for _ in pairs(package.loaded) do
+      count = count + 1
+    end
+    if count ~= modules then
+      modules = count
+      M.rescan()
+    end
+  end, {
+    group = group,
+    desc = "runtime-analysis.telemetry: wrap what the plugins required since the last look",
   })
 end
 
