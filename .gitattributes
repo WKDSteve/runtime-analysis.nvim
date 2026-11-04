@@ -42,6 +42,9 @@ scripts/hooks/*   text eol=lf
 # nothing actually wrong. Regenerating appears to fix it locally until the
 # next `git checkout` or `git stash` converts them back. Same convention
 # docmap.nvim's own `.gitattributes` already uses, verbatim reasoning.
-docs/map/index.html      text eol=lf linguist-generated=true
-docs/map/module_map.json text eol=lf linguist-generated=true
-docs/map/overview.md     text eol=lf linguist-generated=true
+# The map is generated, and CI commits it on main: a copy regenerated in a shared working tree would
+# conflict in `git pull --rebase --autostash`. `ours` keeps upstream's. It needs `git config --global
+# merge.ours.driver true` once per machine (see docs/reuse.md of docmap.nvim).
+docs/map/index.html      text eol=lf linguist-generated=true merge=ours
+docs/map/module_map.json text eol=lf linguist-generated=true merge=ours
+docs/map/overview.md     text eol=lf linguist-generated=true merge=ours
