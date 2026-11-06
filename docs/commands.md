@@ -260,6 +260,18 @@ different repository (the same precedent `fetch_raw`/`fetch_raw_blocking`
 already set once — this plugin was the reason those exist too), not
 attempted here.
 
+## `:RA diagnose`
+
+Writes the state of the plugin to a plain-text file in a temporary directory and
+prints its path, to attach to a bug report: Neovim version, plugin commit, resolved
+options, live telemetry instances with their state, namespaces disabled for good,
+cache folders and their sizes, and the sibling plugins with folder and commit (the
+same list `:checkhealth runtime-analysis` shows). Nothing is started or changed.
+
+Left out on purpose: request headers and bodies, the URLs of the history (only the
+number of entries), the values of environments (only their names), and the value of
+any option whose name looks like a secret (`token`, `key`, `auth`, ...).
+
 ## `:RA history`
 
 Opens a `vim.ui.select` picker (whichever picker UI is already configured

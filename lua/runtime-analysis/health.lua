@@ -285,6 +285,18 @@ function M.check()
     })
   end
 
+  h_start("runtime-analysis.nvim: siblings")
+  -- The one list `:RA diagnose` shows too.
+  for _, sib in ipairs(require("runtime-analysis.diagnostics").siblings()) do
+    if sib.error then
+      h_warn(("%s fails to load"):format(sib.name), { sib.error })
+    elseif sib.found then
+      h_ok(("%s at %s (%s)"):format(sib.name, sib.root, sib.commit or "no git checkout"))
+    else
+      h_info(sib.name .. " not installed")
+    end
+  end
+
   h_start("runtime-analysis.nvim: commands")
   -- All four checked here are registered unconditionally by `require("runtime-analysis")
   -- .setup()` — nothing here is independently opt-in the way `telemetry`'s

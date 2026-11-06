@@ -1050,6 +1050,18 @@ function M.setup(ra)
         end,
       },
       {
+        path = { "diagnose" },
+        desc = "Write the plugin's state to a file to attach to a bug report",
+        run = function()
+          local path, err = require("runtime-analysis.diagnostics").run()
+          if path then
+            notify.info("diagnostics written to " .. path)
+          else
+            notify.warn("could not write the diagnostics: " .. tostring(err))
+          end
+        end,
+      },
+      {
         path = { "history" },
         desc = "Browse this project's request history and reopen one",
         run = function()

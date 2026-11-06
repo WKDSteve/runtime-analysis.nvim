@@ -262,8 +262,15 @@ Response assertions ~
   lib.nvim.net.curl for a real kill is separate work in a different
   repository, not attempted here.
 
+                                                            *:RA-diagnose*
+:RA diagnose                    Write the plugin's state to a plain-text
+                                file in a temporary directory and print
+                                its path, to attach to a bug report.
+                                Headers, bodies, history URLs and the
+                                values of environments stay out.
+
                                                             *:RA-history*
-:RA history                     Open a vim.ui.select picker (whichever
+:RA history                    Open a vim.ui.select picker (whichever
                                 picker UI is already configured) over
                                 every send this project has recorded,
                                 newest first: "date  status  METHOD  url".
