@@ -36,7 +36,7 @@ local function h_info(msg, advice)
   h_info_raw(msg)
 end
 
-local MIN_NVIM = { 0, 10, 0 }
+local MIN_NVIM = { 0, 11, 0 }
 
 ---The lib.nvim modules this plugin actually requires — as module paths
 ---rather than one `lib.nvim` probe, so a missing piece is named rather than

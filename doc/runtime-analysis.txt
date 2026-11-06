@@ -42,7 +42,7 @@ Plus |:RA-provenance|, |:RA-inspect|, |:RA-usage| and `runtime-analysis.bench`
 ==============================================================================
 2. REQUIREMENTS                                *runtime-analysis-requirements*
 
-  - Neovim 0.10 or later (`vim.system`)
+  - Neovim 0.11 or later (`vim.system`)
   - lib.nvim (https://github.com/WKDSteve/lib.nvim) — hard dependency:
     `net.curl`'s `fetch_raw`/`fetch_raw_blocking` for the request runner,
     `usercmd.composer` for |:RA|, `progress` for the sending/cancel

@@ -8,7 +8,7 @@ lives here.
 
 | | |
 | --- | --- |
-| Neovim | **0.10+** — `vim.system` for the request runner, `vim.uv.hrtime` for telemetry timing |
+| Neovim | **0.11+** — `vim.system` for the request runner, `vim.uv.hrtime` for telemetry timing |
 | [lib.nvim](https://github.com/WKDSteve/lib.nvim) | required, hard dependency |
 | `curl` on `PATH` | required for `:RA send` only — every other feature works without it |
 | [mdview.nvim](https://github.com/WKDSteve/mdview.nvim) | optional, soft: renders a telemetry report as a live browser tab |
