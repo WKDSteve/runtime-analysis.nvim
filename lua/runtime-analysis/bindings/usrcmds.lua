@@ -1050,6 +1050,23 @@ function M.setup(ra)
         end,
       },
       {
+        path = { "transcript", "on" },
+        desc = "Keep a Markdown protocol of this session's sends, live in mdview",
+        run = function()
+          local path, err = require("runtime-analysis.transcript").on()
+          if not path then
+            notify.warn("could not start the transcript: " .. tostring(err))
+          end
+        end,
+      },
+      {
+        path = { "transcript", "off" },
+        desc = "Stop the protocol of this session's sends and remove its file",
+        run = function()
+          require("runtime-analysis.transcript").off()
+        end,
+      },
+      {
         path = { "diagnose" },
         desc = "Write the plugin's state to a file to attach to a bug report",
         run = function()

@@ -262,6 +262,12 @@ Response assertions ~
   lib.nvim.net.curl for a real kill is separate work in a different
   repository, not attempted here.
 
+                                                            *:RA-transcript*
+:RA transcript on|off           A Markdown protocol of this session's
+                                sends in a temporary file, live in the
+                                browser with mdview.nvim. Method, redacted
+                                URL and result only: no headers or bodies.
+
                                                             *:RA-diagnose*
 :RA diagnose                    Write the plugin's state to a plain-text
                                 file in a temporary directory and print

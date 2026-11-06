@@ -55,6 +55,13 @@ the same reason `:RA export`ing a request never bakes a secret in either.
   [BINDINGS.md](../BINDINGS.md#user-commands))
 - **Docs:** [`docs/commands.md`](../commands.md) "`:RA env`" section.
 
+## Session transcript
+
+`:RA transcript on` keeps a Markdown protocol of the sends of this session, which
+mdview follows in the browser. Stored: time, method, redacted URL, status or failure.
+Not stored: headers and bodies. The file is temporary and goes away with
+`:RA transcript off`. See [commands.md](../commands.md).
+
 ## Request history, request-only
 
 Every send is recorded — method, url, status, timestamp, per project —

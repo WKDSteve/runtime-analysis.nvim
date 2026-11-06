@@ -54,6 +54,7 @@ local specs = {
   "init_spec.lua",
   "usrcmds_spec.lua",
   "diagnostics_spec.lua",
+  "transcript_spec.lua",
   "pattern_tables_spec.lua",
   "env_choice_spec.lua",
   "usrcmds_help_spec.lua",

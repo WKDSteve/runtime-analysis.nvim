@@ -244,6 +244,7 @@ end
 ---history at an isolated directory instead of the real cache, the same
 ---reason `runtime-analysis.telemetry`'s own `new({ dir = ... })` exists.
 function M.record(method, url, status, note, opts)
+  require("runtime-analysis.transcript").add(method, M.redact_url(url), status, note)
   local key = cache_key()
   local entries, load_err = read_entries(key, opts)
   if load_err then

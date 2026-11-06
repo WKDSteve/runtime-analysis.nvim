@@ -260,6 +260,18 @@ different repository (the same precedent `fetch_raw`/`fetch_raw_blocking`
 already set once — this plugin was the reason those exist too), not
 attempted here.
 
+## `:RA transcript on|off`
+
+Keeps a Markdown protocol of this session's sends in a temporary file: time, method,
+redacted URL and the status or the reason of a failure, one line per send, cancelled
+ones included. With mdview.nvim a browser page follows the file (`:MDView standalone`);
+without its browser path the file is shown once in mdview's preview tab, and without
+mdview the command says where the file is. `on` while it is on shows it again, `off`
+removes the file.
+
+Off by default. It holds what the history holds and no more: no headers and no bodies,
+which can carry secrets.
+
 ## `:RA diagnose`
 
 Writes the state of the plugin to a plain-text file in a temporary directory and
