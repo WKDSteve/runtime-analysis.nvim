@@ -948,410 +948,541 @@ local function do_reset_all(namespace)
   end)
 end
 
+---The context of one `:RATelemetry` call, for the handlers below.
+---@class RuntimeAnalysis.TelemetryCall
+---@field mod table # the telemetry module
+---@field first string|nil # the subcommand as typed
+---@field rest string|nil # the second token, usually a namespace
+---@field fargs string[]
+
+---`:RATelemetry reset`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_reset(call)
+  local rest = call.rest
+  -- Its own branch, not folded into start/stop below: unlike those two,
+  -- a reset may prompt for a backup directory first (`do_reset_all`),
+  -- and that async-ish confirm flow doesn't fit the other two's
+  -- immediate-and-done shape.
+  do_reset_all(rest)
+end
+
+---`:RATelemetry start | stop`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_start(call)
+  local mod = call.mod
+  local first = call.first
+  local rest = call.rest
+  -- A bare `rest` is a namespace, e.g. `:RATelemetry stop markdown.nvim`
+  -- — every other subcommand that takes one puts it in the same slot, so
+  -- this stays consistent with `:RATelemetry <namespace>` (report).
+  if rest and rest ~= "" then
+    local inst = mod.get(rest)
+    if not inst then
+      notify.warn(("no telemetry instance for namespace %q"):format(rest))
+      return
+    end
+    if first == "start" then
+      inst.start()
+      notify.info(("started %s"):format(rest))
+    else
+      inst.stop()
+      -- Naming the file, because `stop` is where "is it saved?" gets
+      -- asked and a path answers it outright. `stop` flushes.
+      notify.info(("stopped %s — written to %s"):format(rest, inst.data_path()))
+    end
+    return
+  end
+
+  if first == "start" then
+    notify.info(("started %d instance(s)"):format(mod.start_all()))
+  else
+    notify.info(("stopped %d instance(s), each written to its cache file"):format(mod.stop_all()))
+  end
+end
+
+---`:RATelemetry flush`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_flush(call)
+  local mod = call.mod
+  local rest = call.rest
+  -- Write now, keep recording. The periodic flush already does this
+  -- every `flush_interval_ms`, and `stop`/`VimLeavePre` do it too — so
+  -- this command buys one thing only: certainty at a chosen moment,
+  -- without ending the run to get it. That is worth a command name
+  -- because the alternative people actually reach for is `stop`, which
+  -- costs them the wrappers and the session's continuity.
+  if rest and rest ~= "" then
+    local inst = mod.get(rest)
+    if not inst then
+      notify.warn(("no telemetry instance for namespace %q"):format(rest))
+      return
+    end
+    if inst.flush() then
+      notify.info(("flushed %s — %s"):format(rest, inst.data_path()))
+    else
+      notify.error(("could not write %s"):format(inst.data_path()))
+    end
+    return
+  end
+
+  -- `mod.flush_all()` exists and is deliberately not used here: it
+  -- returns only the number that succeeded, so "no instance is running"
+  -- and "every write failed" both come back as 0. For a command whose
+  -- entire job is confirming that a write happened, those are the two
+  -- answers that must not be spelled the same.
+  local written, failed = 0, 0
+  for _, inst in ipairs(mod.instances()) do
+    if inst.flush() then
+      written = written + 1
+    else
+      failed = failed + 1
+    end
+  end
+  if written == 0 and failed == 0 then
+    notify.warn("no live telemetry instance to flush")
+  elseif failed > 0 then
+    notify.error(("flushed %d instance(s), %d could not be written"):format(written, failed))
+  else
+    notify.info(("flushed %d instance(s)"):format(written))
+  end
+end
+
+---`:RATelemetry disable | enable`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_disable(call)
+  local mod = call.mod
+  local first = call.first
+  local rest = call.rest
+  -- Unlike start/stop/reset, a namespace here does NOT need a live
+  -- instance to exist — disabling something before it has ever loaded
+  -- this session is the common case, not an edge case.
+  if rest and rest ~= "" then
+    mod[first](rest)
+    notify.info(("%sd %s"):format(first, rest))
+    return
+  end
+
+  local n = 0
+  for _, inst in ipairs(mod.instances()) do
+    mod[first](inst.namespace)
+    n = n + 1
+  end
+  notify.info(("%sd %d instance(s)"):format(first, n))
+end
+
+---`:RATelemetry disabled`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_disabled(call)
+  local mod = call.mod
+  local list = mod.disabled()
+  show(
+    #list > 0 and list or { "no namespace is currently disabled." },
+    "runtime-analysis.telemetry — disabled"
+  )
+end
+
+---`:RATelemetry status`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_status(call)
+  local mod = call.mod
+  -- One ROW per namespace this plugin knows about — live this session or
+  -- only ever persisted — rather than `report`'s own function-by-function
+  -- dump of every instance at once. Answers "which repos are recording,
+  -- in what mode, and is there anything on disk worth reading", the
+  -- whole-fleet question `report` was never shaped to answer quickly once
+  -- more than a couple of namespaces exist. `<CR>` still reaches the full
+  -- per-function report for the namespace under the cursor, the same
+  -- drilldown every other multi-instance view already offers.
+  local report_mod_ = require("runtime-analysis.telemetry.report")
+  local by_ns = {}
+  local count = 0
+
+  local function build()
+    -- `top = 40`, the same cap the bare report view uses: these reports
+    -- are what `<CR>` hands straight to `report.lines()`, and a namespace
+    -- with 800 wrapped functions would otherwise drill down into a
+    -- three-thousand-line float. The board's own numbers are unaffected —
+    -- `report.build` totals every entry before it truncates.
+    local rows = mod.status_reports({ report_opts = { sort = "calls", top = 40 } })
+    by_ns, count = {}, #rows
+    for _, row in ipairs(rows) do
+      by_ns[row.report.namespace] = row
+    end
+    return report_mod_.status_lines(rows)
+  end
+
+  local lines = build()
+  show(lines, ("runtime-analysis.telemetry — status · %d namespaces"):format(count), {
+    table_view = true,
+    on_refresh = build,
+    -- Not `header_namespace`: a table row is `<namespace> <state> …`, so
+    -- the namespace is the first column rather than the left half of a
+    -- `"<ns>  —  <state>"` header. A row that names something `by_ns`
+    -- does not know (the heading row's "NAMESPACE", the summary line)
+    -- resolves to nothing and `<CR>` is a no-op there, which is the
+    -- correct behaviour for both.
+    namespace_at = function(line)
+      return line:match("^(%S+)")
+    end,
+    on_lines = status_highlights,
+    on_drilldown = function(ns)
+      local row = by_ns[ns]
+      if not row then
+        return nil
+      end
+      return report_mod_.lines(row.report, {
+        data_path = row.data_path,
+        data_bytes = row.data_bytes,
+      }),
+        ("runtime-analysis.telemetry — %s"):format(ns)
+    end,
+  })
+end
+
+---`:RATelemetry coverage`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_coverage(call)
+  local mod = call.mod
+  local lines = {}
+  for _, inst in ipairs(mod.instances()) do
+    local cov = inst.coverage()
+    lines[#lines + 1] = ("%s — %d called, %d never called"):format(
+      inst.namespace,
+      #cov.called,
+      #cov.uncalled
+    )
+    for _, key in ipairs(cov.uncalled) do
+      lines[#lines + 1] = "  · " .. key
+    end
+    lines[#lines + 1] = ""
+  end
+  show(#lines > 0 and lines or { "no telemetry instances." }, "runtime-analysis.telemetry coverage")
+end
+
+---`:RATelemetry export`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_export(call)
+  local rest = call.rest
+  if rest and rest:sub(-4):lower() == ".pdf" then
+    export(rest, function(written, err)
+      if written then
+        notify.info("wrote " .. written)
+      else
+        notify.error("export failed: " .. tostring(err))
+      end
+    end)
+  else
+    local written = export(rest)
+    if written then
+      notify.info("wrote " .. written)
+    else
+      notify.error("export failed")
+    end
+  end
+end
+
+---`:RATelemetry export-all`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_export_all(call)
+  local mod = call.mod
+  local rest = call.rest
+  if not rest or rest == "" then
+    notify.warn("usage: :RATelemetry export-all <dir>")
+    return
+  end
+  local written, failed = mod.export_all(rest)
+  if #failed > 0 then
+    notify.warn(
+      ("wrote %d report(s) to %s, %d failed: %s"):format(
+        #written,
+        rest,
+        #failed,
+        table.concat(failed, ", ")
+      )
+    )
+  elseif #written == 0 then
+    notify.warn("no telemetry data found to export")
+  else
+    notify.info(("wrote %d report(s) to %s"):format(#written, rest))
+  end
+end
+
+---`:RATelemetry open`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_open(call)
+  local rest = call.rest
+  open_report(rest)
+end
+
+---`:RATelemetry startup`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_startup(call)
+  local rest = call.rest
+  -- Namespace-free on purpose: this measures
+  -- module loads, not one namespace's wrapped functions, so the
+  -- second slot every other subcommand uses for a namespace is a
+  -- `top` count here instead.
+  local startup = require("runtime-analysis.telemetry.startup")
+  show(
+    startup.lines(startup.report({ top = tonumber(rest) or 40 })),
+    "runtime-analysis.telemetry — startup"
+  )
+end
+
+---`:RATelemetry flamegraph`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_flamegraph(call)
+  local rest = call.rest
+  -- Namespace-free for the same reason `startup` above is: this draws
+  -- module loads, of which a session has exactly one set. `rest` is
+  -- therefore an output path rather than a namespace -- pass one to keep
+  -- the file (next to a ticket, in a repo), leave it out and it lands in
+  -- the disposable cache directory beside the other reports.
+  local startup = require("runtime-analysis.telemetry.startup")
+  local flamegraph = require("runtime-analysis.telemetry.renderers.flamegraph")
+  local report = startup.report()
+
+  if #(report.order or {}) == 0 then
+    notify.warn(
+      "no startup data recorded — telemetry.startup.autostart() has to run before the "
+        .. "modules you want to see (see its own docs for where that line belongs)"
+    )
+    return
+  end
+
+  -- expand_path, not vim.fn.expand (SEC-34): `rest` is the raw command
+  -- argument the user typed.
+  local path = (rest and rest ~= "") and vim.fn.fnamemodify(expand_path(rest), ":p")
+    or report_file.flamegraph_path()
+  local ok_write, err = report_file.write(path, { flamegraph.svg(report) })
+  if not ok_write then
+    notify.error("failed to write flamegraph: " .. tostring(err))
+    return
+  end
+
+  -- images.nvim first, and only as a soft dependency: it draws the SVG
+  -- in the terminal through its own cached SVG->PNG conversion, which is
+  -- the whole reason this renderer emits SVG. Without it the file still
+  -- exists and the system opener still shows it -- the graphic is the
+  -- deliverable, the viewer is a convenience.
+  local ok_images, images = pcall(require, "images")
+  if ok_images and type(images.show) == "function" and images.show(path) then
+    notify.info("wrote " .. path)
+    return
+  end
+
+  local ok_open = pcall(function()
+    require("lib.nvim.cross.open_default")(path)
+  end)
+  notify.info(
+    ok_open and ("wrote and opened " .. path)
+      or ("wrote " .. path .. " — open it yourself, no system opener available")
+  )
+end
+
+---`:RATelemetry cost`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_cost(call)
+  local mod = call.mod
+  -- No arguments: this is inherently cross-
+  -- namespace (a per-namespace `cost` would just repeat `report`'s own
+  -- call count with one extra number), and it reads live startup data
+  -- rather than anything this instance itself persists.
+  local startup = require("runtime-analysis.telemetry.startup")
+  local cost_vs_use = require("runtime-analysis.telemetry.cost_vs_use")
+  local namespaces = {}
+  for _, inst in ipairs(mod.instances()) do
+    namespaces[#namespaces + 1] = {
+      namespace = inst.namespace,
+      resolved_modules = inst.resolved_modules(),
+      total_calls = inst.report().total_calls,
+    }
+  end
+  show(
+    cost_vs_use.lines(cost_vs_use.build_all(namespaces, startup.report())),
+    "runtime-analysis.telemetry — cost vs use"
+  )
+end
+
+---`:RATelemetry snapshot`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_snapshot(call)
+  local mod = call.mod
+  local rest = call.rest
+  -- `rest` is the namespace, same slot every other subcommand puts it
+  -- in; a third token, if present, is the snapshot's own name. Requires
+  -- a namespace explicitly (unlike start/stop/reset's "every instance"
+  -- fallback) -- a bare `:RATelemetry snapshot` snapshotting every live
+  -- instance at once under the same auto-generated timestamp would be a
+  -- surprising amount of silent disk writing for a command whose whole
+  -- point is being explicit.
+  if not rest or rest == "" then
+    notify.warn("usage: :RATelemetry snapshot <namespace> [name]")
+    return
+  end
+  local saved_name = mod.snapshot(rest, call.fargs[3])
+  if saved_name then
+    notify.info(("saved snapshot %q for %s"):format(saved_name, rest))
+  else
+    notify.warn(
+      ("nothing to snapshot for %q -- no live instance and nothing persisted yet"):format(rest)
+    )
+  end
+end
+
+---`:RATelemetry snapshots`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_snapshots(call)
+  local mod = call.mod
+  local rest = call.rest
+  if not rest or rest == "" then
+    notify.warn("usage: :RATelemetry snapshots <namespace>")
+    return
+  end
+  local list = mod.list_snapshots(rest)
+  if #list == 0 then
+    show(
+      { ("no snapshots saved for %s yet."):format(rest) },
+      "runtime-analysis.telemetry — snapshots"
+    )
+    return
+  end
+  local lines = {}
+  for _, s in ipairs(list) do
+    lines[#lines + 1] = ("%s — %s"):format(s.name, os.date("%Y-%m-%d %H:%M:%S", s.saved_at))
+  end
+  show(lines, ("runtime-analysis.telemetry — snapshots (%s)"):format(rest))
+end
+
+---`:RATelemetry snapshot-compare`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_snapshot_compare(call)
+  local mod = call.mod
+  local rest = call.rest
+  local name_a, name_b = call.fargs[3], call.fargs[4]
+  if not rest or rest == "" or not name_a or not name_b then
+    notify.warn("usage: :RATelemetry snapshot-compare <namespace> <name_a> <name_b>")
+    return
+  end
+  local cmp = mod.compare_snapshots(rest, name_a, name_b)
+  if not cmp then
+    notify.warn(("%q or %q not found among %s's saved snapshots"):format(name_a, name_b, rest))
+    return
+  end
+  show(
+    require("runtime-analysis.telemetry.report").compare_snapshots_lines(cmp),
+    "runtime-analysis.telemetry — snapshot compare"
+  )
+end
+
+---`:RATelemetry setup | full`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_setup(call)
+  local first = call.first
+  local rest = call.rest
+  -- `:RATelemetry setup|full [namespace]` -- the same backup/reset/
+  -- re-wrap/start `:RATelemetrySetupAll`/`SetupAllFull` run, narrowed to
+  -- one target when a namespace is given. `full` forces argument
+  -- profiling + timing on regardless of that target's own policy, the
+  -- identical meaning it has in `:RATelemetrySetupAllFull`.
+  --
+  -- This is the form that reaches a NON-plugin target -- chiefly the
+  -- reader's own config, declared as `opts.telemetry.extra` -- since a
+  -- config has no repo to name and could never be selected the way a
+  -- plugin is. `:RATelemetry full nvim-config` is the motivating case.
+  do_setup_all(first == "full", rest)
+end
+
+---`:RATelemetry compare`
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_compare(call)
+  local rest = call.rest
+  -- `rest` is a namespace exactly the way every other subcommand's
+  -- second slot already is; a third token, if numeric, overrides
+  -- inst.compare()'s own default window (7 days) — deliberately not
+  -- validated beyond `tonumber` (a non-numeric third token is simply
+  -- ignored, same posture `report`'s own bare-namespace fallthrough
+  -- takes on anything it does not specifically recognize).
+  local days = tonumber(call.fargs[3])
+  show(compare_lines(rest, days), "runtime-analysis.telemetry — compare")
+end
+
+---`:RATelemetry [report] [namespace]`: anything no handler claims is a namespace to report on.
+---@param call RuntimeAnalysis.TelemetryCall
+local function cmd_report(call)
+  local mod, first, rest = call.mod, call.first, call.rest
+  -- "report" (explicit or implied) — a bare namespace is the common case.
+  local namespace = first
+  if first == nil or first == "report" then
+    namespace = rest
+  end
+  local report_show_opts = {
+    on_refresh = function()
+      if namespace and namespace ~= "" then
+        local inst = mod.get(namespace)
+        if inst then
+          inst.flush()
+        end
+      else
+        for _, inst in ipairs(mod.instances()) do
+          inst.flush()
+        end
+      end
+      return report_lines({ sort = "calls", top = 40 }, namespace)
+    end,
+  }
+  -- Same reasoning as open_report's dispatch: a single-namespace view's
+  -- only header row is already itself, so drilldown is only offered on
+  -- the bare "every instance" report.
+  if not namespace or namespace == "" then
+    report_show_opts.on_drilldown = function(ns)
+      local inst = mod.get(ns)
+      if not inst then
+        return nil
+      end
+      inst.flush()
+      return inst.lines(), ("runtime-analysis.telemetry — %s"):format(ns)
+    end
+  end
+  show(
+    report_lines({ sort = "calls", top = 40 }, namespace),
+    "runtime-analysis.telemetry",
+    report_show_opts
+  )
+end
+
+---Subcommand -> handler. A word not listed here is the report's namespace.
+---@type table<string, fun(call: RuntimeAnalysis.TelemetryCall)>
+local HANDLERS = {
+  reset = cmd_reset,
+  start = cmd_start,
+  stop = cmd_start,
+  flush = cmd_flush,
+  disable = cmd_disable,
+  enable = cmd_disable,
+  disabled = cmd_disabled,
+  status = cmd_status,
+  coverage = cmd_coverage,
+  export = cmd_export,
+  ["export-all"] = cmd_export_all,
+  open = cmd_open,
+  startup = cmd_startup,
+  flamegraph = cmd_flamegraph,
+  cost = cmd_cost,
+  snapshot = cmd_snapshot,
+  snapshots = cmd_snapshots,
+  ["snapshot-compare"] = cmd_snapshot_compare,
+  setup = cmd_setup,
+  full = cmd_setup,
+  compare = cmd_compare,
+}
+
 ---Register `:RATelemetry`. Idempotent (`usercmd.create` defaults to `force`).
 function M.setup()
   usercmd.create("RATelemetry", function(args)
-    local mod = telemetry()
     local first = args.fargs[1]
-    local rest = args.fargs[2]
-
-    if first == "reset" then
-      -- Its own branch, not folded into start/stop below: unlike those two,
-      -- a reset may prompt for a backup directory first (`do_reset_all`),
-      -- and that async-ish confirm flow doesn't fit the other two's
-      -- immediate-and-done shape.
-      do_reset_all(rest)
-    elseif first == "start" or first == "stop" then
-      -- A bare `rest` is a namespace, e.g. `:RATelemetry stop markdown.nvim`
-      -- — every other subcommand that takes one puts it in the same slot, so
-      -- this stays consistent with `:RATelemetry <namespace>` (report).
-      if rest and rest ~= "" then
-        local inst = mod.get(rest)
-        if not inst then
-          notify.warn(("no telemetry instance for namespace %q"):format(rest))
-          return
-        end
-        if first == "start" then
-          inst.start()
-          notify.info(("started %s"):format(rest))
-        else
-          inst.stop()
-          -- Naming the file, because `stop` is where "is it saved?" gets
-          -- asked and a path answers it outright. `stop` flushes.
-          notify.info(("stopped %s — written to %s"):format(rest, inst.data_path()))
-        end
-        return
-      end
-
-      if first == "start" then
-        notify.info(("started %d instance(s)"):format(mod.start_all()))
-      else
-        notify.info(
-          ("stopped %d instance(s), each written to its cache file"):format(mod.stop_all())
-        )
-      end
-    elseif first == "flush" then
-      -- Write now, keep recording. The periodic flush already does this
-      -- every `flush_interval_ms`, and `stop`/`VimLeavePre` do it too — so
-      -- this command buys one thing only: certainty at a chosen moment,
-      -- without ending the run to get it. That is worth a command name
-      -- because the alternative people actually reach for is `stop`, which
-      -- costs them the wrappers and the session's continuity.
-      if rest and rest ~= "" then
-        local inst = mod.get(rest)
-        if not inst then
-          notify.warn(("no telemetry instance for namespace %q"):format(rest))
-          return
-        end
-        if inst.flush() then
-          notify.info(("flushed %s — %s"):format(rest, inst.data_path()))
-        else
-          notify.error(("could not write %s"):format(inst.data_path()))
-        end
-        return
-      end
-
-      -- `mod.flush_all()` exists and is deliberately not used here: it
-      -- returns only the number that succeeded, so "no instance is running"
-      -- and "every write failed" both come back as 0. For a command whose
-      -- entire job is confirming that a write happened, those are the two
-      -- answers that must not be spelled the same.
-      local written, failed = 0, 0
-      for _, inst in ipairs(mod.instances()) do
-        if inst.flush() then
-          written = written + 1
-        else
-          failed = failed + 1
-        end
-      end
-      if written == 0 and failed == 0 then
-        notify.warn("no live telemetry instance to flush")
-      elseif failed > 0 then
-        notify.error(("flushed %d instance(s), %d could not be written"):format(written, failed))
-      else
-        notify.info(("flushed %d instance(s)"):format(written))
-      end
-    elseif first == "disable" or first == "enable" then
-      -- Unlike start/stop/reset, a namespace here does NOT need a live
-      -- instance to exist — disabling something before it has ever loaded
-      -- this session is the common case, not an edge case.
-      if rest and rest ~= "" then
-        mod[first](rest)
-        notify.info(("%sd %s"):format(first, rest))
-        return
-      end
-
-      local n = 0
-      for _, inst in ipairs(mod.instances()) do
-        mod[first](inst.namespace)
-        n = n + 1
-      end
-      notify.info(("%sd %d instance(s)"):format(first, n))
-    elseif first == "disabled" then
-      local list = mod.disabled()
-      show(
-        #list > 0 and list or { "no namespace is currently disabled." },
-        "runtime-analysis.telemetry — disabled"
-      )
-    elseif first == "status" then
-      -- One ROW per namespace this plugin knows about — live this session or
-      -- only ever persisted — rather than `report`'s own function-by-function
-      -- dump of every instance at once. Answers "which repos are recording,
-      -- in what mode, and is there anything on disk worth reading", the
-      -- whole-fleet question `report` was never shaped to answer quickly once
-      -- more than a couple of namespaces exist. `<CR>` still reaches the full
-      -- per-function report for the namespace under the cursor, the same
-      -- drilldown every other multi-instance view already offers.
-      local report_mod_ = require("runtime-analysis.telemetry.report")
-      local by_ns = {}
-      local count = 0
-
-      local function build()
-        -- `top = 40`, the same cap the bare report view uses: these reports
-        -- are what `<CR>` hands straight to `report.lines()`, and a namespace
-        -- with 800 wrapped functions would otherwise drill down into a
-        -- three-thousand-line float. The board's own numbers are unaffected —
-        -- `report.build` totals every entry before it truncates.
-        local rows = mod.status_reports({ report_opts = { sort = "calls", top = 40 } })
-        by_ns, count = {}, #rows
-        for _, row in ipairs(rows) do
-          by_ns[row.report.namespace] = row
-        end
-        return report_mod_.status_lines(rows)
-      end
-
-      local lines = build()
-      show(lines, ("runtime-analysis.telemetry — status · %d namespaces"):format(count), {
-        table_view = true,
-        on_refresh = build,
-        -- Not `header_namespace`: a table row is `<namespace> <state> …`, so
-        -- the namespace is the first column rather than the left half of a
-        -- `"<ns>  —  <state>"` header. A row that names something `by_ns`
-        -- does not know (the heading row's "NAMESPACE", the summary line)
-        -- resolves to nothing and `<CR>` is a no-op there, which is the
-        -- correct behaviour for both.
-        namespace_at = function(line)
-          return line:match("^(%S+)")
-        end,
-        on_lines = status_highlights,
-        on_drilldown = function(ns)
-          local row = by_ns[ns]
-          if not row then
-            return nil
-          end
-          return report_mod_.lines(row.report, {
-            data_path = row.data_path,
-            data_bytes = row.data_bytes,
-          }),
-            ("runtime-analysis.telemetry — %s"):format(ns)
-        end,
-      })
-    elseif first == "coverage" then
-      local lines = {}
-      for _, inst in ipairs(mod.instances()) do
-        local cov = inst.coverage()
-        lines[#lines + 1] = ("%s — %d called, %d never called"):format(
-          inst.namespace,
-          #cov.called,
-          #cov.uncalled
-        )
-        for _, key in ipairs(cov.uncalled) do
-          lines[#lines + 1] = "  · " .. key
-        end
-        lines[#lines + 1] = ""
-      end
-      show(
-        #lines > 0 and lines or { "no telemetry instances." },
-        "runtime-analysis.telemetry coverage"
-      )
-    elseif first == "export" then
-      if rest and rest:sub(-4):lower() == ".pdf" then
-        export(rest, function(written, err)
-          if written then
-            notify.info("wrote " .. written)
-          else
-            notify.error("export failed: " .. tostring(err))
-          end
-        end)
-      else
-        local written = export(rest)
-        if written then
-          notify.info("wrote " .. written)
-        else
-          notify.error("export failed")
-        end
-      end
-    elseif first == "export-all" then
-      if not rest or rest == "" then
-        notify.warn("usage: :RATelemetry export-all <dir>")
-        return
-      end
-      local written, failed = mod.export_all(rest)
-      if #failed > 0 then
-        notify.warn(
-          ("wrote %d report(s) to %s, %d failed: %s"):format(
-            #written,
-            rest,
-            #failed,
-            table.concat(failed, ", ")
-          )
-        )
-      elseif #written == 0 then
-        notify.warn("no telemetry data found to export")
-      else
-        notify.info(("wrote %d report(s) to %s"):format(#written, rest))
-      end
-    elseif first == "open" then
-      open_report(rest)
-    elseif first == "startup" then
-      -- Namespace-free on purpose: this measures
-      -- module loads, not one namespace's wrapped functions, so the
-      -- second slot every other subcommand uses for a namespace is a
-      -- `top` count here instead.
-      local startup = require("runtime-analysis.telemetry.startup")
-      show(
-        startup.lines(startup.report({ top = tonumber(rest) or 40 })),
-        "runtime-analysis.telemetry — startup"
-      )
-    elseif first == "flamegraph" then
-      -- Namespace-free for the same reason `startup` above is: this draws
-      -- module loads, of which a session has exactly one set. `rest` is
-      -- therefore an output path rather than a namespace -- pass one to keep
-      -- the file (next to a ticket, in a repo), leave it out and it lands in
-      -- the disposable cache directory beside the other reports.
-      local startup = require("runtime-analysis.telemetry.startup")
-      local flamegraph = require("runtime-analysis.telemetry.renderers.flamegraph")
-      local report = startup.report()
-
-      if #(report.order or {}) == 0 then
-        notify.warn(
-          "no startup data recorded — telemetry.startup.autostart() has to run before the "
-            .. "modules you want to see (see its own docs for where that line belongs)"
-        )
-        return
-      end
-
-      -- expand_path, not vim.fn.expand (SEC-34): `rest` is the raw command
-      -- argument the user typed.
-      local path = (rest and rest ~= "") and vim.fn.fnamemodify(expand_path(rest), ":p")
-        or report_file.flamegraph_path()
-      local ok_write, err = report_file.write(path, { flamegraph.svg(report) })
-      if not ok_write then
-        notify.error("failed to write flamegraph: " .. tostring(err))
-        return
-      end
-
-      -- images.nvim first, and only as a soft dependency: it draws the SVG
-      -- in the terminal through its own cached SVG->PNG conversion, which is
-      -- the whole reason this renderer emits SVG. Without it the file still
-      -- exists and the system opener still shows it -- the graphic is the
-      -- deliverable, the viewer is a convenience.
-      local ok_images, images = pcall(require, "images")
-      if ok_images and type(images.show) == "function" and images.show(path) then
-        notify.info("wrote " .. path)
-        return
-      end
-
-      local ok_open = pcall(function()
-        require("lib.nvim.cross.open_default")(path)
-      end)
-      notify.info(
-        ok_open and ("wrote and opened " .. path)
-          or ("wrote " .. path .. " — open it yourself, no system opener available")
-      )
-    elseif first == "cost" then
-      -- No arguments: this is inherently cross-
-      -- namespace (a per-namespace `cost` would just repeat `report`'s own
-      -- call count with one extra number), and it reads live startup data
-      -- rather than anything this instance itself persists.
-      local startup = require("runtime-analysis.telemetry.startup")
-      local cost_vs_use = require("runtime-analysis.telemetry.cost_vs_use")
-      local namespaces = {}
-      for _, inst in ipairs(mod.instances()) do
-        namespaces[#namespaces + 1] = {
-          namespace = inst.namespace,
-          resolved_modules = inst.resolved_modules(),
-          total_calls = inst.report().total_calls,
-        }
-      end
-      show(
-        cost_vs_use.lines(cost_vs_use.build_all(namespaces, startup.report())),
-        "runtime-analysis.telemetry — cost vs use"
-      )
-    elseif first == "snapshot" then
-      -- `rest` is the namespace, same slot every other subcommand puts it
-      -- in; a third token, if present, is the snapshot's own name. Requires
-      -- a namespace explicitly (unlike start/stop/reset's "every instance"
-      -- fallback) -- a bare `:RATelemetry snapshot` snapshotting every live
-      -- instance at once under the same auto-generated timestamp would be a
-      -- surprising amount of silent disk writing for a command whose whole
-      -- point is being explicit.
-      if not rest or rest == "" then
-        notify.warn("usage: :RATelemetry snapshot <namespace> [name]")
-        return
-      end
-      local saved_name = mod.snapshot(rest, args.fargs[3])
-      if saved_name then
-        notify.info(("saved snapshot %q for %s"):format(saved_name, rest))
-      else
-        notify.warn(
-          ("nothing to snapshot for %q -- no live instance and nothing persisted yet"):format(rest)
-        )
-      end
-    elseif first == "snapshots" then
-      if not rest or rest == "" then
-        notify.warn("usage: :RATelemetry snapshots <namespace>")
-        return
-      end
-      local list = mod.list_snapshots(rest)
-      if #list == 0 then
-        show(
-          { ("no snapshots saved for %s yet."):format(rest) },
-          "runtime-analysis.telemetry — snapshots"
-        )
-        return
-      end
-      local lines = {}
-      for _, s in ipairs(list) do
-        lines[#lines + 1] = ("%s — %s"):format(s.name, os.date("%Y-%m-%d %H:%M:%S", s.saved_at))
-      end
-      show(lines, ("runtime-analysis.telemetry — snapshots (%s)"):format(rest))
-    elseif first == "snapshot-compare" then
-      local name_a, name_b = args.fargs[3], args.fargs[4]
-      if not rest or rest == "" or not name_a or not name_b then
-        notify.warn("usage: :RATelemetry snapshot-compare <namespace> <name_a> <name_b>")
-        return
-      end
-      local cmp = mod.compare_snapshots(rest, name_a, name_b)
-      if not cmp then
-        notify.warn(("%q or %q not found among %s's saved snapshots"):format(name_a, name_b, rest))
-        return
-      end
-      show(
-        require("runtime-analysis.telemetry.report").compare_snapshots_lines(cmp),
-        "runtime-analysis.telemetry — snapshot compare"
-      )
-    elseif first == "setup" or first == "full" then
-      -- `:RATelemetry setup|full [namespace]` -- the same backup/reset/
-      -- re-wrap/start `:RATelemetrySetupAll`/`SetupAllFull` run, narrowed to
-      -- one target when a namespace is given. `full` forces argument
-      -- profiling + timing on regardless of that target's own policy, the
-      -- identical meaning it has in `:RATelemetrySetupAllFull`.
-      --
-      -- This is the form that reaches a NON-plugin target -- chiefly the
-      -- reader's own config, declared as `opts.telemetry.extra` -- since a
-      -- config has no repo to name and could never be selected the way a
-      -- plugin is. `:RATelemetry full nvim-config` is the motivating case.
-      do_setup_all(first == "full", rest)
-    elseif first == "compare" then
-      -- `rest` is a namespace exactly the way every other subcommand's
-      -- second slot already is; a third token, if numeric, overrides
-      -- inst.compare()'s own default window (7 days) — deliberately not
-      -- validated beyond `tonumber` (a non-numeric third token is simply
-      -- ignored, same posture `report`'s own bare-namespace fallthrough
-      -- takes on anything it does not specifically recognize).
-      local days = tonumber(args.fargs[3])
-      show(compare_lines(rest, days), "runtime-analysis.telemetry — compare")
-    else
-      -- "report" (explicit or implied) — a bare namespace is the common case.
-      local namespace = first
-      if first == nil or first == "report" then
-        namespace = rest
-      end
-      local report_show_opts = {
-        on_refresh = function()
-          if namespace and namespace ~= "" then
-            local inst = mod.get(namespace)
-            if inst then
-              inst.flush()
-            end
-          else
-            for _, inst in ipairs(mod.instances()) do
-              inst.flush()
-            end
-          end
-          return report_lines({ sort = "calls", top = 40 }, namespace)
-        end,
-      }
-      -- Same reasoning as open_report's dispatch: a single-namespace view's
-      -- only header row is already itself, so drilldown is only offered on
-      -- the bare "every instance" report.
-      if not namespace or namespace == "" then
-        report_show_opts.on_drilldown = function(ns)
-          local inst = mod.get(ns)
-          if not inst then
-            return nil
-          end
-          inst.flush()
-          return inst.lines(), ("runtime-analysis.telemetry — %s"):format(ns)
-        end
-      end
-      show(
-        report_lines({ sort = "calls", top = 40 }, namespace),
-        "runtime-analysis.telemetry",
-        report_show_opts
-      )
-    end
+    local handler = first and HANDLERS[first] or cmd_report
+    handler({ mod = telemetry(), first = first, rest = args.fargs[2], fargs = args.fargs })
   end, {
     nargs = "*",
     desc = "runtime-analysis.telemetry: report|status|start|stop|flush|reset|disable|enable|disabled|coverage|export|export-all|open|compare|startup|flamegraph|cost|snapshot|snapshots|snapshot-compare|setup|full [namespace] [days]",
