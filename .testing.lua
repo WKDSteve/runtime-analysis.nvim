@@ -7,15 +7,16 @@ return {
   plugin = "runtime-analysis",
   -- How the spec files are run: "auto" = sniffed per file, "h" = on the project's own TESTS/harness.lua,
   -- "script" = a self-running script in its own process.
-  dialect = "h",
+  dialect = { ["TESTS/sheets_spec.lua"] = "busted", ["*"] = "h" },
   -- Dependencies (directory names) put on the runtimepath: $<NAME>_DIR, .deps/<name>, ../<name>,
   -- stdpath('data')/lazy/<name>.
-  deps = { "lib.nvim" },
+  deps = { "lib.nvim", "testing.nvim" },
   -- "none" = all specs in one nvim, "file" = one nvim per spec file
   -- (nothing leaks from one file into the next).
   -- Here "file": the :RA* commands, autocmds, buffers and highlight groups that setup() and the
   -- views leave behind must not leak into the next file (this keeps the state guard clean without
   -- an allowlist), and the plugin's cache writes land in the child's own sandbox.
+  timeouts = { case_ms = 90000, file_ms = 300000 },
   isolated = "file",
   -- Environment variables the specs read; a child editor inherits an allowlist only (never secrets).
   env_allow = { "MAGICK_*" },
