@@ -585,6 +585,34 @@ return function(H)
     wipe_server:close()
   end
 
+  -- `:RA export` of a block that carries an `@expect status` directive: the directive is not part of the
+  -- request (`:RA send` strips it too), so the curl line comes out and nothing is reported as malformed.
+  do
+    local export_buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_win_set_buf(winid, export_buf)
+    vim.api.nvim_buf_set_lines(
+      export_buf,
+      0,
+      -1,
+      false,
+      { "# @expect status 200", "GET http://example.invalid/ok", "Accept: application/json" }
+    )
+    vim.fn.setreg('"', "")
+    vim.cmd("RA export")
+    local yanked = vim.fn.getreg('"')
+    ok(
+      yanked:find("curl 'http://example.invalid/ok'", 1, true) ~= nil
+        and yanked:find("Accept: application/json", 1, true) ~= nil,
+      "usrcmds: :RA export yanks the curl line of a block with an @expect directive"
+    )
+    ok(
+      yanked:find("expect", 1, true) == nil,
+      "usrcmds: the @expect directive is not part of the exported request"
+    )
+    vim.api.nvim_win_set_buf(winid, prev_buf)
+    vim.api.nvim_buf_delete(export_buf, { force = true })
+  end
+
   vim.api.nvim_win_set_buf(winid, prev_buf)
   vim.api.nvim_buf_delete(bufnr, { force = true })
   vim.api.nvim_buf_delete(slow_buf, { force = true })

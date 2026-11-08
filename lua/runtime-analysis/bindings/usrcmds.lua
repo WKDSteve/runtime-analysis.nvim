@@ -741,7 +741,9 @@ local function do_export()
     block_lines = block and block.lines or lines
   end
 
-  local request, err = parse.parse(block_lines)
+  -- An `@expect status N` line is a directive for `:RA send`, not part of the request: `parse.parse` has no
+  -- comment syntax, so it is stripped first, exactly as `send_current_buffer` does.
+  local request, err = parse.parse(require("runtime-analysis.assertions").strip(block_lines))
   if not request then
     notify.error(err or "could not parse the request block")
     return
