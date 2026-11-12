@@ -1533,7 +1533,8 @@ function M.set_export_dir(spec)
   export_spec = (spec ~= "" and spec) or nil
 end
 
----The directory `export-all` uses without an argument, or nil when none is configured (or the function gave none).
+---The directory `export-all` uses without an argument, with `~` and environment variables expanded, or nil when none
+---is configured (or the function gave none).
 ---@return string|nil
 function M.export_dir()
   local spec = export_spec
@@ -1544,7 +1545,8 @@ function M.export_dir()
   if type(spec) ~= "string" or spec == "" then
     return nil
   end
-  return spec
+  -- A configured "~/..." or "$VAR/..." is meant as the user's folder, not a folder named "~" in the cwd.
+  return vim.fs.normalize(spec)
 end
 
 ---`dir` itself when it does not exist yet, else the first free `dir_2`, `dir_3`, ...: an export is never written

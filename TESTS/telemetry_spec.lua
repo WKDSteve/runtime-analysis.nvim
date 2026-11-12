@@ -2530,11 +2530,15 @@ return function(H)
     H.eq(telemetry.export_dir(), nil, "export_dir: nothing configured by default")
 
     telemetry.set_export_dir(base)
-    H.eq(telemetry.export_dir(), base, "export_dir: a configured path")
+    H.eq(telemetry.export_dir(), vim.fs.normalize(base), "export_dir: a configured path")
     telemetry.set_export_dir(function()
       return base .. "-fn"
     end)
-    H.eq(telemetry.export_dir(), base .. "-fn", "export_dir: a function is asked each time")
+    H.eq(
+      telemetry.export_dir(),
+      vim.fs.normalize(base .. "-fn"),
+      "export_dir: a function is asked each time"
+    )
     telemetry.set_export_dir(function()
       return nil
     end)
@@ -2547,6 +2551,20 @@ return function(H)
       nil,
       "export_dir: a function that throws means no target, not an error"
     )
+    telemetry.set_export_dir("~/ra-export")
+    H.eq(
+      telemetry.export_dir(),
+      vim.fs.normalize(vim.uv.os_homedir() .. "/ra-export"),
+      "export_dir: ~ is the home folder, not a folder named ~"
+    )
+    vim.env.RA_EXPORT_TEST = base
+    telemetry.set_export_dir("$RA_EXPORT_TEST/sub")
+    H.eq(
+      telemetry.export_dir(),
+      vim.fs.normalize(base .. "/sub"),
+      "export_dir: an environment variable is expanded"
+    )
+    vim.env.RA_EXPORT_TEST = nil
     telemetry.set_export_dir("")
     H.eq(telemetry.export_dir(), nil, "export_dir: an empty string clears it")
     H.ok(not pcall(telemetry.set_export_dir, 5), "export_dir: a number is refused")
