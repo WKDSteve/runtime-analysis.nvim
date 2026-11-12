@@ -5,6 +5,7 @@
 -- Not here: the other :RATelemetry reports (they need recorded data), the look of the floats.
 return {
   id = "runtime-analysis.analysis",
+  feature = "runtime-analysis.inspect",
   title = ":RA provenance, inspect, loaded, usage, startup and the :RATelemetry basics",
   task = "runtime-analysis.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },

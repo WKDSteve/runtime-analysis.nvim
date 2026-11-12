@@ -5,6 +5,7 @@
 -- Not here: transcript (needs mdview), the look of the response window.
 return {
   id = "runtime-analysis.http",
+  feature = "runtime-analysis.requests",
   title = ":RA request, send, yank, env, history, cancel, export and import",
   task = "runtime-analysis.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },
