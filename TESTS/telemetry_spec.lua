@@ -2523,6 +2523,53 @@ return function(H)
   end
 
   -- -------------------------------------------------------------------------
+  -- export-all without an argument: the configured target, never over an earlier export
+  -- -------------------------------------------------------------------------
+  do
+    local base = tmpdir .. "-export-default"
+    H.eq(telemetry.export_dir(), nil, "export_dir: nothing configured by default")
+
+    telemetry.set_export_dir(base)
+    H.eq(telemetry.export_dir(), base, "export_dir: a configured path")
+    telemetry.set_export_dir(function()
+      return base .. "-fn"
+    end)
+    H.eq(telemetry.export_dir(), base .. "-fn", "export_dir: a function is asked each time")
+    telemetry.set_export_dir(function()
+      return nil
+    end)
+    H.eq(telemetry.export_dir(), nil, "export_dir: a function that returns nil means no target")
+    telemetry.set_export_dir(function()
+      error("boom")
+    end)
+    H.eq(
+      telemetry.export_dir(),
+      nil,
+      "export_dir: a function that throws means no target, not an error"
+    )
+    telemetry.set_export_dir("")
+    H.eq(telemetry.export_dir(), nil, "export_dir: an empty string clears it")
+    H.ok(not pcall(telemetry.set_export_dir, 5), "export_dir: a number is refused")
+    telemetry.set_export_dir(nil)
+
+    H.eq(
+      telemetry.fresh_dir(base),
+      base,
+      "fresh_dir: a folder that does not exist is used as it is"
+    )
+    vim.fn.mkdir(base, "p")
+    H.eq(
+      telemetry.fresh_dir(base),
+      base .. "_2",
+      "fresh_dir: an existing folder gets the next free suffix"
+    )
+    vim.fn.mkdir(base .. "_2", "p")
+    H.eq(telemetry.fresh_dir(base), base .. "_3", "fresh_dir: ...and the one after that")
+    vim.fn.delete(base, "rf")
+    vim.fn.delete(base .. "_2", "rf")
+  end
+
+  -- -------------------------------------------------------------------------
   -- :RATelemetry export .pdf — routes through pdfport.nvim (optional
   -- dependency, soft-required). Stubs package.loaded["pdfport"] rather than
   -- depending on a real pdfport.nvim + pandoc install being present on the

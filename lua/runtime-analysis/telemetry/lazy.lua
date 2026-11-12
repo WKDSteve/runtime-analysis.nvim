@@ -74,7 +74,8 @@ local config_validate = require("runtime-analysis.config.validate")
 -- The exact fields each of `RA.Telemetry.LazyOpts`, `LazyPluginOpts` and
 -- `ExtraTarget` accepts -- see `validate_opts` below, called once at the top
 -- of `M.setup()`.
-local KNOWN_LAZY_OPTS = { "plugins", "lib_nvim", "extra" }
+local KNOWN_LAZY_OPTS = { "plugins", "lib_nvim", "extra", "export" }
+local KNOWN_EXPORT_OPTS = { "dir" }
 local KNOWN_PLUGIN_OPTS =
   { "namespace", "deep", "profile_args", "timing", "errors", "persist", "dir" }
 local KNOWN_EXTRA_OPTS =
@@ -89,6 +90,15 @@ local KNOWN_LIB_NVIM_OPTS = { "profile_args", "timing", "persist", "dir" }
 ---@param opts RA.Telemetry.LazyOpts
 local function validate_opts(opts)
   config_validate.check(opts, KNOWN_LAZY_OPTS, "runtime-analysis.telemetry.lazy.setup()", notify)
+
+  if type(opts.export) == "table" then
+    config_validate.check(
+      opts.export,
+      KNOWN_EXPORT_OPTS,
+      "runtime-analysis.telemetry.lazy.setup() opts.export",
+      notify
+    )
+  end
 
   if type(opts.lib_nvim) == "table" then
     config_validate.check(
@@ -323,6 +333,14 @@ function M.setup(opts)
   validate_opts(opts)
 
   configured = opts
+
+  -- Where `:RATelemetry export-all` writes with no argument. Set first: it does not depend on lazy.nvim at all.
+  if type(opts.export) == "table" and opts.export.dir ~= nil then
+    local ok, err = pcall(require("runtime-analysis.telemetry").set_export_dir, opts.export.dir)
+    if not ok then
+      notify.warn(tostring(err))
+    end
+  end
 
   if type(opts.extra) == "table" then
     setup_extra(opts.extra)

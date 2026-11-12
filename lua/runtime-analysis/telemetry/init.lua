@@ -1520,6 +1520,46 @@ function M.export_all(target_dir, opts)
   return written, failed
 end
 
+---@type string|(fun(): string|nil)|nil
+local export_spec = nil
+
+---Set where `:RATelemetry export-all` writes when it is given no directory: a path, or a function that returns one
+---(or nil for "no target", so the command still asks for an argument). `nil` clears it.
+---@param spec string|(fun(): string|nil)|nil
+function M.set_export_dir(spec)
+  if spec ~= nil and type(spec) ~= "string" and type(spec) ~= "function" then
+    error("telemetry export dir must be a string or a function, got " .. type(spec), 2)
+  end
+  export_spec = (spec ~= "" and spec) or nil
+end
+
+---The directory `export-all` uses without an argument, or nil when none is configured (or the function gave none).
+---@return string|nil
+function M.export_dir()
+  local spec = export_spec
+  if type(spec) == "function" then
+    local ok, got = pcall(spec)
+    spec = ok and got or nil
+  end
+  if type(spec) ~= "string" or spec == "" then
+    return nil
+  end
+  return spec
+end
+
+---`dir` itself when it does not exist yet, else the first free `dir_2`, `dir_3`, ...: an export is never written
+---over an earlier one by accident.
+---@param dir string
+---@return string
+function M.fresh_dir(dir)
+  local candidate, n = dir, 1
+  while vim.uv.fs_stat(candidate) do
+    n = n + 1
+    candidate = ("%s_%d"):format(dir, n)
+  end
+  return candidate
+end
+
 ---Every namespace this plugin knows about by name, sorted — live in this
 ---process (`instances`) unioned with everything ever persisted
 ---(`store.namespaces()`). Neither source alone is "every namespace": a

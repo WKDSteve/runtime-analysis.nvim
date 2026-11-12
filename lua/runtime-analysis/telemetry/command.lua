@@ -35,7 +35,7 @@
 ---   :RATelemetry coverage        which wrapped functions were never called
 ---   :RATelemetry export [path]   write a snapshot (JSON, Markdown if path
 ---                                ends .md, PDF via pdfport.nvim if .pdf)
----   :RATelemetry export-all <dir>  one Markdown file per namespace found on
+---   :RATelemetry export-all [<dir>]  one Markdown file per namespace found on
 ---                                disk into <dir> -- unlike `export`, not
 ---                                limited to this session's live instances
 ---   :RATelemetry open [ns]       render + open (report_style: auto/kit/preview-tab/mdview/file/html)
@@ -1187,8 +1187,13 @@ local function cmd_export_all(call)
   local mod = call.mod
   local rest = call.rest
   if not rest or rest == "" then
-    notify.warn("usage: :RATelemetry export-all <dir>")
-    return
+    -- No argument: the configured target (`telemetry.export.dir`), never written over an earlier export
+    local configured = mod.export_dir and mod.export_dir()
+    if not configured then
+      notify.warn("usage: :RATelemetry export-all <dir>  (or set telemetry.export.dir)")
+      return
+    end
+    rest = mod.fresh_dir(configured)
   end
   local written, failed = mod.export_all(rest)
   if #failed > 0 then

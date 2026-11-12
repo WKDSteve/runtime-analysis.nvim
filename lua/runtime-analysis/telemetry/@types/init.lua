@@ -360,6 +360,7 @@
 ---@class RA.Telemetry.LazyOpts
 ---@field plugins? table<string, RA.Telemetry.LazyPluginOpts>       # keyed by repo, e.g. "WKDSteve/markdown.nvim"
 ---@field lib_nvim? { profile_args?: boolean, timing?: boolean, persist?: boolean, dir?: string }|false
+---@field export? { dir?: string|fun(): string|nil }  # where `:RATelemetry export-all` writes with no argument; a path or a function returning one (nil: none)
 ---@field extra? RA.Telemetry.ExtraTarget[]                         # non-plugin targets, chiefly the reader's own config
 
 -- ---------------------------------------------------------------------------
