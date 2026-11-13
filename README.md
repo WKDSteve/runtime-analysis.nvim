@@ -97,3 +97,17 @@ covers the environment.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 runtime-analysis.nvim is released under the [MIT License](https://opensource.org/licenses/MIT).
+
+<!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
+## Connections
+
+![runtime-analysis.nvim: what it uses and what uses it](assets/graphs/runtime-analysis.nvim.png)
+
+**Uses**
+
+- [images.nvim](https://github.com/WKDSteve/images.nvim): runtime-analysis.nvim shows its graphic through images.nvim when it is installed; otherwise the system opener shows it. ([picture](assets/graphs/pair/runtime-analysis.nvim--images.nvim.png))
+- [mdview.nvim](https://github.com/WKDSteve/mdview.nvim): The report styles `auto`, `mdview` and `preview-tab` of runtime-analysis.nvim open the report through mdview.nvim. ([picture](assets/graphs/pair/runtime-analysis.nvim--mdview.nvim.png))
+- [pdfport.nvim](https://github.com/WKDSteve/pdfport.nvim): `:RATelemetry export report.pdf` of runtime-analysis.nvim is written through pdfport.nvim. ([picture](assets/graphs/pair/runtime-analysis.nvim--pdfport.nvim.png))
+- [ui.nvim](https://github.com/WKDSteve/ui.nvim): runtime-analysis.nvim picks one item from a list with the kit of ui.nvim when it is installed. ([picture](assets/graphs/pair/runtime-analysis.nvim--ui.nvim.png))
+- [lib.nvim](https://github.com/WKDSteve/lib.nvim): the shared base of the plugins.
+<!-- connections:end -->
