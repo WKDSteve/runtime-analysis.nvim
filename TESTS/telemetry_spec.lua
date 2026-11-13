@@ -2352,7 +2352,7 @@ return function(H)
 
   -- -------------------------------------------------------------------------
   -- report_style resolution: mdview.nvim is not on this test run's runtime
-  -- path (TESTS/run.lua only appends the lib.nvim repo itself), so
+  -- path (testing.nvim puts only the `deps` of .testing.lua there), so
   -- "mdview"/"auto" deterministically fall back to "kit" here -- exactly the
   -- degrade-silently path a consumer without mdview installed hits for real.
   -- -------------------------------------------------------------------------
