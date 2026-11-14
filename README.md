@@ -110,4 +110,9 @@ runtime-analysis.nvim is released under the [MIT License](https://opensource.org
 - [pdfport.nvim](https://github.com/WKDSteve/pdfport.nvim): `:RATelemetry export report.pdf` of runtime-analysis.nvim is written through pdfport.nvim. ([picture](assets/graphs/pair/runtime-analysis.nvim--pdfport.nvim.png))
 - [ui.nvim](https://github.com/WKDSteve/ui.nvim): runtime-analysis.nvim picks one item from a list with the kit of ui.nvim when it is installed. ([picture](assets/graphs/pair/runtime-analysis.nvim--ui.nvim.png))
 - [lib.nvim](https://github.com/WKDSteve/lib.nvim): the shared base of the plugins.
+
+**Used by**
+
+- [docmap-desktop](https://github.com/WKDSteve/docmap-desktop): docmap-desktop shows the telemetry runtime-analysis.nvim collects inside Neovim and can switch collection on for a project; it never measures itself. ([picture](assets/graphs/pair/docmap-desktop--runtime-analysis.nvim.png))
+- [docmap.nvim](https://github.com/WKDSteve/docmap.nvim): docmap.nvim joins its static map with the counts runtime-analysis.nvim collects: which routes ran, and how often. ([picture](assets/graphs/pair/docmap.nvim--runtime-analysis.nvim.png))
 <!-- connections:end -->
