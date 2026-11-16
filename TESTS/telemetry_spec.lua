@@ -2296,6 +2296,10 @@ return function(H)
       vim.cmd("RATelemetry disable does-not-exist")
     end)
     H.eq(ok_unknown, true, "disabling an unknown/not-yet-loaded namespace does not error")
+    -- `:RATelemetry` has no dir override, so that disable went to the user's
+    -- real, persistent disable list: take it back out again.
+    vim.cmd("RATelemetry enable does-not-exist")
+    H.eq(toggle.is_disabled("does-not-exist"), false, "the spec leaves no entry behind")
 
     ta.unwrap()
     tb.unwrap()
