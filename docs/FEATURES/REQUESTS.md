@@ -71,7 +71,20 @@ and contain secrets of its own. `:RA history` opens a picker to reopen one
 as a fresh request buffer; `:RA history clear` empties the current
 project's history.
 
-- **Module:** `history.lua` (`M.record`, `M.list`, `M.clear`)
-- **Usercmds:** `:RA history [clear]` (see
+Each answered send also carries what was **measured about** the answer,
+never the answer itself: `duration_ms` (wall time until curl answered),
+`bytes` (size of the response body) and `shape` — the top-level JSON type,
+the key names one level deep with the type of each value (at most 32 keys,
+names cut at 64 bytes, the rest counted in `more`), and the media type of
+`Content-Type`. A non-JSON answer carries its media type only; a cancelled
+send carries nothing. Entries written before these fields existed stay
+valid, and every field is re-validated when the file is read back.
+`:RA traffic` shows the history as a measurement, one row per endpoint
+(sends, ok/error/failed, median and max duration, last status, size and
+shape). It covers recorded `:RA send`s only, not all traffic.
+
+- **Module:** `history.lua` (`M.record`, `M.list`, `M.clear`), `shape.lua`,
+  `traffic.lua`
+- **Usercmds:** `:RA history [clear]`, `:RA traffic` (see
   [BINDINGS.md](../BINDINGS.md#user-commands))
 - **Docs:** [`docs/commands.md`](../commands.md) "`:RA history`" section.

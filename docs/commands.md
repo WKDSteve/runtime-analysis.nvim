@@ -289,7 +289,7 @@ any option whose name looks like a secret (`token`, `key`, `auth`, ...).
 Opens a `vim.ui.select` picker (whichever picker UI is already configured
 — telescope, fzf-lua, snacks, or Neovim's own default) over every send
 this project has recorded, newest first, formatted as `date  status
-METHOD url`. Picking one calls `M.open_request({"METHOD url", ""})` —
+duration  size  METHOD url`. Picking one calls `M.open_request({"METHOD url", ""})` —
 exactly docmap.nvim's own Endpoints-mode integration, since a
 history entry *is*, by design, exactly that much information and no more.
 A secret query value is stored as `<redacted>` (see below): type it in again
@@ -343,6 +343,45 @@ The password of a `https://user:password@host/` authority is replaced too.
 **Honest limit, not silently worked around:** only the listed key names (and a
 userinfo password) are caught. A secret under an unlisted key, or inside the
 path, is still stored verbatim.
+
+**Measurements: shape and metadata, never content.** An answered send also
+records three optional fields (an entry written before they existed stays
+valid):
+
+| Field | What | Not |
+| ----- | ---- | --- |
+| `duration_ms` | wall time from handing the request to curl until curl answered (also set on a transport failure: how long it took to fail) | not the time Neovim needed to render it |
+| `bytes` | size of the response body in bytes | not the body |
+| `shape` | `type` (top-level JSON type: `object`, `array`, `string`, `number`, `boolean`, `null`), `keys` (for an object: key name -> type of its value, one level deep), `more` (keys left out), `items` (for an array: the shared element type or `mixed`), `content_type` (media type without `; charset=...`) | no values, no nested keys, no other headers |
+
+The caps follow the telemetry fingerprints (SEC-13, SEC-32): at most 32 keys
+(sorted, so the same answer keeps the same keys; the rest is counted in
+`more`), key names and media types cut at 64 bytes, so a map-shaped answer
+(`{ "<id>": {...} }`) or a token used as a key cannot turn an entry into a
+copy of the data. A response that is not JSON, or claims to be and does not
+decode, carries only `content_type`; a cancelled send carries none of the
+three. Reading the file back re-validates every field (SEC-33): an unknown
+type tag, a non-number size or a key whose "type" is really a value is
+dropped, never handed on.
+
+What this is for: docmap.nvim can compare a route's documented `@return`
+with the shapes actually seen ("documented as an object, answered with an
+array"), and `:RA traffic` reads the same entries as a measurement.
+
+## `:RA traffic`
+
+The history as a measurement, one row per endpoint (method plus URL without
+query and fragment), most-sent first: number of sends, how many answered
+below 400, how many with 400 or more, how many failed without an answer
+(transport error, cancelled), median and max duration of the answered sends,
+and status, body size and shape of the newest send. Shown in the response
+split.
+
+It reads only what the history recorded, so the same limits hold: metadata
+and shapes, never content; only sends through `:RA send`, capped at
+`history_max_entries` -- "recorded sends of this project", not "all traffic".
+Percentiles beyond the median, retries until success and error classes are
+not part of it.
 
 ## `:RA history clear`
 

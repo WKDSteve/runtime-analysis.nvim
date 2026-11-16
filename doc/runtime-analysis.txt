@@ -279,7 +279,8 @@ Response assertions ~
 :RA history                    Open a vim.ui.select picker (whichever
                                 picker UI is already configured) over
                                 every send this project has recorded,
-                                newest first: "date  status  METHOD  url".
+                                newest first: "date  status  duration
+                                size  METHOD  url".
                                 Picking one reopens it via open_request —
                                 see |runtime-analysis-history| below for
                                 exactly what is and is not recorded.
@@ -292,6 +293,14 @@ Response assertions ~
                                                       *:RA-history-clear*
 :RA history clear               Clear this project's recorded history. No
                                 confirmation prompt.
+
+                                                            *:RA-traffic*
+:RA traffic                     The history as a measurement, one row per
+                                endpoint (URL without query): sends,
+                                ok/error/failed, median and max duration,
+                                last status, body size and shape. Recorded
+                                sends only, metadata and shapes, never
+                                content.
 
                                                                 *:RA-env*
 :RA env [name]                  With `name` (`<Tab>`-completed), select it
@@ -427,6 +436,12 @@ Request history ~
   collection in one repository never shows up in another's history.
   Capped at |runtime-analysis-opts.history_max_entries| (default 200) total,
   oldest dropped first.
+
+  An answered send also records `duration_ms`, `bytes` (body size) and
+  `shape`: the top-level JSON type, the key names one level deep with the
+  type of each value (at most 32 keys, names cut at 64 bytes) and the media
+  type. Never a value, never the body. A non-JSON answer carries its media
+  type only. All three are optional; older entries stay valid.
 
   Every outcome is recorded exactly once: a real response, a transport
   failure, an explicit |:RA-cancel|, and even a superseded send's real

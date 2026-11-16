@@ -21,6 +21,7 @@ opt-in the way telemetry's own auto-instrumentation (`opts.telemetry`) is.
 | `:RA cancel` | none | Discards the in-flight request's eventual result and shows `✗ cancelled`. A *logical* cancel, not a process kill — see [`commands.md`](commands.md) for why. Warns, does not error, when nothing is in flight. |
 | `:RA history` | none | `vim.ui.select` picker over this project's recorded sends (method/url/status/timestamp only — see [`commands.md`](commands.md)), newest first; picking one reopens it via `open_request`. |
 | `:RA history clear` | none | Clears this project's recorded history. No confirmation prompt. |
+| `:RA traffic` | none | One row per endpoint from the history: sends, ok/error/failed, median and max duration, last status, size and shape. Metadata and shapes only, never content. |
 | `:RA env [name]` | environment name, optional, `<Tab>`-completed | With `name`, selects it as the active environment `{{var}}` placeholders resolve against; with none, `vim.ui.select` over every name the project's env files define. See [`commands.md`](commands.md) for the file format. |
 | `:RA import` | none (or a range, e.g. `'<,'>RA import`) | Parses a `curl` command line — from the system clipboard, or the given range's lines — into a new request buffer. |
 | `:RA export` | none | Yanks the `###` block under the cursor as a shareable `curl` command line to the unnamed register. |
@@ -40,7 +41,7 @@ opt-in the way telemetry's own auto-instrumentation (`opts.telemetry`) is.
 
 Built via [`lib.nvim.bindings.usercmd.composer`](https://github.com/WKDSteve/lib.nvim/blob/main/lua/lib/nvim/bindings/usercmd/composer/README.md)
 — the same verb-first shape `:DocMap`, `:MDView` and `:Replace` already use
-(`<Tab>` after `:RA ` completes `request`/`send`/`yank`/`cancel`/`history`/
+(`<Tab>` after `:RA ` completes `request`/`send`/`yank`/`cancel`/`history`/`traffic`/
 `env`/`import`/`export`/`provenance`/`inspect`/`usage`/`loaded`; `:RA
 history <Tab>` completes `clear`, `:RA env <Tab>` completes whatever names
 this project's env files currently define, `:RA inspect <Tab>` completes
@@ -89,7 +90,8 @@ Full reasoning: [`commands.md`](commands.md).
 `runtime-analysis.history` records method/url/status/timestamp for every
 send, per project (`lib.nvim.fs.project_key()`), via `lib.nvim.cache.disk`
 — no headers, no body, on either side (a header is very often where the
-real secret actually lives). Capped at `history_max_entries` (default 200), oldest
+real secret actually lives). An answered send adds its duration, body size
+and shape (JSON type and key names with types, capped; never values). Capped at `history_max_entries` (default 200), oldest
 dropped first. Full reasoning: [`commands.md`](commands.md)'s own section on it.
 
 ### Variables and environments (`:RA env`)
