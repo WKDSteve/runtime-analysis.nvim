@@ -75,7 +75,9 @@ Each answered send also carries what was **measured about** the answer,
 never the answer itself: `duration_ms` (wall time until curl answered),
 `bytes` (size of the response body) and `shape` — the top-level JSON type,
 the key names one level deep with the type of each value (at most 32 keys,
-names cut at 64 bytes, the rest counted in `more`), and the media type of
+the rest counted in `more`; a key that does not look like a field name --
+a token or ID in a map-shaped answer -- is only counted in `opaque`, never
+named), and the media type of
 `Content-Type`. A non-JSON answer carries its media type only; a cancelled
 send carries nothing. Entries written before these fields existed stay
 valid, and every field is re-validated when the file is read back.

@@ -4,7 +4,8 @@
 --- and answered with an array" without anyone ever storing the answer.
 ---
 --- **Shape, never content** (SEC-11, SEC-13): the top-level JSON type, the
---- key names one level deep with the *type* of each value, and the media
+--- key names one level deep with the *type* of each value (only keys that
+--- look like field names, see `M.MAX_KEY_LEN`; the rest is counted), and the media
 --- type of the `Content-Type` header. No values, no other headers, no body.
 --- A response that is not JSON (or claims to be and does not decode)
 --- carries the media type only.
@@ -23,11 +24,64 @@ local M = {}
 ---history entry into a copy of its key set.
 M.MAX_KEYS = 32
 
----Key names and media types longer than this are cut. The same order of
----magnitude as the telemetry fingerprint's 64-byte digest window: long
----enough for any real field name, short enough that a key which is itself
----data (a token used as a map key) cannot be stored in full.
+---Media types longer than this are cut (a header value is not ours to keep
+---in full).
 M.MAX_NAME = 64
+
+---A key name is stored only when it looks like a field name: at most this
+---long, starting with a letter, `_`, `@` or `$`, made of letters, digits and
+---`_ - . $ @`, with at most `MAX_KEY_DIGITS` digits and, when it mixes
+---cases, not more than a third upper-case letters. Every other key is only
+---counted in `opaque`, its name never stored.
+---
+---A whitelist (SEC-40) rather than a length cap: a map-shaped answer
+---(`{ "<token>": {...}, "user_123456": {...} }`) uses data as its keys, and
+---most tokens and IDs are far shorter than any cap that still fits real
+---field names, so a cap alone kept up to `MAX_KEYS` of them in clear. Hex,
+---base64 and numeric IDs carry digits; real field names rarely carry more
+---than a few (`address2`, `v1_url`). The price: a field name with many
+---digits is counted instead of named, and a random key with few digits can
+---still pass (unlikely, not impossible).
+M.MAX_KEY_LEN = 40
+M.MAX_KEY_DIGITS = 3
+
+---Whether `k` may be stored as a key name (see `MAX_KEY_LEN`).
+---@param k any
+---@return boolean
+function M.is_field_name(k)
+  if type(k) ~= "string" or #k > M.MAX_KEY_LEN then
+    return false
+  end
+  if not k:match("^[%a_@$][%w_%-%.$@]*$") then
+    return false
+  end
+  local _, digits = k:gsub("%d", "")
+  if digits > M.MAX_KEY_DIGITS then
+    return false
+  end
+  -- Base64 mixes cases at random (`eyJhbGciOiJ...`, often with few digits);
+  -- a camelCase field name has few humps. More than a third upper-case
+  -- letters (and at least three) next to lower-case ones reads as data.
+  -- All upper-case (`HTTP_STATUS`) stays a name.
+  local _, upper = k:gsub("%u", "")
+  if upper >= 3 and k:find("%l") and upper * 3 > #k then
+    return false
+  end
+  return true
+end
+
+---A non-negative finite count from `v`, else 0. `1e999` in a file decodes
+---to `inf`, which `vim.json.encode` refuses, and the next history write
+---would fail.
+---@internal
+---@param v any
+---@return integer
+local function finite_count(v)
+  if type(v) == "number" and v >= 1 and v < math.huge then
+    return math.floor(v)
+  end
+  return 0
+end
 
 ---The type tags a shape may use.
 ---@type table<string, true>
@@ -116,8 +170,35 @@ end
 ---@field content_type string? Media type of the `Content-Type` header, without parameters
 ---@field type string? Top-level JSON type: object, array, string, number, boolean or null; absent when the body is not JSON
 ---@field keys table<string, string>? For an object: key name -> type of its value, at most `MAX_KEYS` of them
----@field more integer? For an object: how many keys were left out of `keys`
+---@field more integer? For an object: how many field-name keys were left out of `keys` (past `MAX_KEYS`)
+---@field opaque integer? For an object: how many keys did not look like a field name and were only counted
 ---@field items string? For a non-empty array: the type all elements share, or `"mixed"`
+
+---Split `names` into the field names kept in `keys` (sorted, at most
+---`MAX_KEYS`, each with `type_for(name)`) and two counts: field names past
+---the cap (`more`) and keys that are no field name at all (`opaque`).
+---@internal
+---@param names string[]
+---@param type_for fun(name: string): string
+---@return table<string, string> keys
+---@return integer more
+---@return integer opaque
+local function split_keys(names, type_for)
+  local fields, opaque = {}, 0
+  for _, k in ipairs(names) do
+    if M.is_field_name(k) then
+      fields[#fields + 1] = k
+    else
+      opaque = opaque + 1
+    end
+  end
+  table.sort(fields)
+  local keys = {}
+  for i = 1, math.min(#fields, M.MAX_KEYS) do
+    keys[fields[i]] = type_for(fields[i])
+  end
+  return keys, math.max(#fields - M.MAX_KEYS, 0), opaque
+end
 
 ---The shape of one response. `is_json` is the runner's own finding (header
 ---says JSON *and* the body decoded); `decoded` is the value it decoded, so
@@ -137,15 +218,12 @@ function M.of(headers, is_json, decoded)
       for k in pairs(decoded) do
         names[#names + 1] = tostring(k)
       end
-      table.sort(names)
-      local keys = {}
-      for i = 1, math.min(#names, M.MAX_KEYS) do
-        keys[cap(names[i])] = type_of(decoded[names[i]])
-      end
+      local keys, more, opaque = split_keys(names, function(name)
+        return type_of(decoded[name])
+      end)
       shape.keys = keys
-      if #names > M.MAX_KEYS then
-        shape.more = #names - M.MAX_KEYS
-      end
+      shape.more = more > 0 and more or nil
+      shape.opaque = opaque > 0 and opaque or nil
     elseif t == "array" then
       shape.items = items_of(decoded)
     end
@@ -179,21 +257,16 @@ function M.sanitize(raw)
         names[#names + 1] = k
       end
     end
-    table.sort(names)
-    local keys = {}
-    for i = 1, math.min(#names, M.MAX_KEYS) do
-      keys[cap(names[i])] = raw.keys[names[i]]
-    end
+    -- A file written before the field-name whitelist existed may still hold
+    -- data-shaped keys: they become `opaque` here, never shown or handed on.
+    local keys, more, opaque = split_keys(names, function(name)
+      return raw.keys[name]
+    end)
     out.keys = keys
-    -- Finite only: `1e999` in the file decodes to `inf`, which
-    -- `vim.json.encode` refuses, and the next history write would fail.
-    local more = (type(raw.more) == "number" and raw.more >= 1 and raw.more < math.huge)
-        and math.floor(raw.more)
-      or 0
-    more = more + math.max(#names - M.MAX_KEYS, 0)
-    if more > 0 then
-      out.more = more
-    end
+    more = more + finite_count(raw.more)
+    opaque = opaque + finite_count(raw.opaque)
+    out.more = more > 0 and more or nil
+    out.opaque = opaque > 0 and opaque or nil
   end
   if out.type == "array" and type(raw.items) == "string" and TYPES[raw.items] then
     out.items = raw.items
@@ -204,8 +277,8 @@ function M.sanitize(raw)
   return out
 end
 
----One short line for a shape: `object{id,name,+3}`, `array<object>`,
----`text/html`. For pickers and the traffic view.
+---One short line for a shape: `object{id,name,+3,+5 opaque}`,
+---`array<object>`, `text/html`. For pickers and the traffic view.
 ---@param shape RA.Shape?
 ---@return string
 function M.summary(shape)
@@ -217,6 +290,9 @@ function M.summary(shape)
     table.sort(names)
     if shape.more then
       names[#names + 1] = "+" .. shape.more
+    end
+    if shape.opaque then
+      names[#names + 1] = "+" .. shape.opaque .. " opaque"
     end
     return "object{" .. table.concat(names, ",") .. "}"
   elseif shape.type == "array" then

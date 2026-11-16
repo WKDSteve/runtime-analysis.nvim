@@ -80,12 +80,63 @@ return function(H)
     eq(s.keys["k" .. ("%03d"):format(shape.MAX_KEYS + 1)], nil, "shape: ... not the later ones")
   end
 
-  -- A key that is itself long data is cut.
+  -- Keys that are data (a map-shaped answer): never stored, only counted.
   do
-    local long = ("x"):rep(500)
-    local s = assert(of_json(('{"%s":1}'):format(long)))
-    local name = next(s.keys)
-    eq(#name, shape.MAX_NAME, "shape: a long key name is capped")
+    local s = assert(of_json(table.concat({
+      "{",
+      '"id":1,',
+      '"address2":"x",',
+      '"$ref":"x",',
+      '"9f86d081884c7d659a2feaa0c55ad015":{},', -- hex digest
+      '"user_123456":{},', -- numeric ID
+      '"eyJhbGciOiJIUzI1NiJ9":{},', -- base64 token
+      '"a b":1,', -- not an identifier
+      ('"%s":1'):format(("x"):rep(500)), -- long
+      "}",
+    })))
+    same(
+      s.keys,
+      { id = "number", address2 = "string", ["$ref"] = "string" },
+      "shape: only field-name keys are stored"
+    )
+    eq(s.opaque, 5, "shape: ... the data-shaped ones are only counted")
+    local dump = vim.inspect(s)
+    for _, leak in ipairs({ "9f86d0", "123456", "eyJhbG", "xxxx", "a b" }) do
+      ok(not dump:find(leak, 1, true), "shape: no data-shaped key is kept: " .. leak)
+    end
+    eq(
+      shape.summary(s),
+      "object{$ref,address2,id,+5 opaque}",
+      "summary: the opaque keys are named as a count"
+    )
+  end
+
+  -- The whitelist itself.
+  do
+    for _, k in ipairs({
+      "id",
+      "createdAt",
+      "_links",
+      "@context",
+      "$schema",
+      "v1_url",
+      "a.b",
+      "x-rate",
+      "HTTP_STATUS",
+    }) do
+      ok(shape.is_field_name(k), "is_field_name: " .. k)
+    end
+    for _, k in ipairs({
+      "",
+      "1abc",
+      "abcd1234",
+      "eyJhbGciOiJIUzI1NiJ9",
+      "with space",
+      ("a"):rep(shape.MAX_KEY_LEN + 1),
+      "ü",
+    }) do
+      ok(not shape.is_field_name(k), "is_field_name refuses: " .. k)
+    end
   end
 
   -- Not JSON: the media type only.
@@ -117,6 +168,23 @@ return function(H)
     eq(s.more, 2 + 6, "sanitize: ... and the dropped keys are counted")
     local html = { content_type = "text/html" }
     same(shape.sanitize(html), html, "sanitize: a valid shape comes back equal")
+  end
+
+  -- Read side: a file written before the whitelist may hold data-shaped
+  -- keys; they become opaque, never shown or handed on.
+  do
+    local s = assert(shape.sanitize({
+      type = "object",
+      keys = { id = "number", ["user_123456"] = "object" },
+      opaque = 2,
+    }))
+    same(s.keys, { id = "number" }, "sanitize: a data-shaped key from the file is dropped")
+    eq(s.opaque, 3, "sanitize: ... and added to the opaque count")
+    eq(
+      shape.sanitize({ type = "object", keys = {}, opaque = 1e999 }).opaque,
+      nil,
+      "sanitize: opaque is finite"
+    )
   end
 
   -- Summary lines.

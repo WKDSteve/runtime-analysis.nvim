@@ -352,13 +352,24 @@ valid):
 | ----- | ---- | --- |
 | `duration_ms` | wall time from handing the request to curl until curl answered (also set on a transport failure: how long it took to fail) | not the time Neovim needed to render it |
 | `bytes` | size of the response body in bytes | not the body |
-| `shape` | `type` (top-level JSON type: `object`, `array`, `string`, `number`, `boolean`, `null`), `keys` (for an object: key name -> type of its value, one level deep), `more` (keys left out), `items` (for an array: the shared element type or `mixed`), `content_type` (media type without `; charset=...`) | no values, no nested keys, no other headers |
+| `shape` | `type` (top-level JSON type: `object`, `array`, `string`, `number`, `boolean`, `null`), `keys` (for an object: key name -> type of its value, one level deep), `more` (field-name keys past the cap), `opaque` (keys that do not look like a field name, only counted), `items` (for an array: the shared element type or `mixed`), `content_type` (media type without `; charset=...`) | no values, no nested keys, no other headers |
 
 The caps follow the telemetry fingerprints (SEC-13, SEC-32): at most 32 keys
 (sorted, so the same answer keeps the same keys; the rest is counted in
-`more`), key names and media types cut at 64 bytes, so a map-shaped answer
-(`{ "<id>": {...} }`) or a token used as a key cannot turn an entry into a
-copy of the data. A response that is not JSON, or claims to be and does not
+`more`), media types cut at 64 bytes.
+
+**Keys that are data are never stored.** A map-shaped answer
+(`{ "<token>": {...}, "user_123456": {...} }`) uses data as its keys, and
+most tokens and IDs are shorter than any length cap that still fits real
+field names. So a key name is stored only when it looks like a field name
+(a whitelist, SEC-40): at most 40 characters, starting with a letter, `_`,
+`@` or `$`, made of letters, digits and `_ - . $ @`, with at most 3 digits,
+and, when it mixes cases, not more than a third upper-case letters (at
+least three); all upper case (`HTTP_STATUS`) stays a name. Every other key
+is only counted in `opaque`. Hex, base64 and numeric IDs fail this; the
+price is that a field name with many digits (or a run of capitals such as
+`XMLHttpRequest`) is counted instead of named, and a random key that
+happens to look like a name can still pass -- unlikely, not impossible. A response that is not JSON, or claims to be and does not
 decode, carries only `content_type`; a cancelled send carries none of the
 three. Reading the file back re-validates every field (SEC-33): an unknown
 type tag, a non-number size or a key whose "type" is really a value is

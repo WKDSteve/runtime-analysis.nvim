@@ -439,8 +439,9 @@ Request history ~
 
   An answered send also records `duration_ms`, `bytes` (body size) and
   `shape`: the top-level JSON type, the key names one level deep with the
-  type of each value (at most 32 keys, names cut at 64 bytes) and the media
-  type. Never a value, never the body. A non-JSON answer carries its media
+  type of each value (at most 32 keys; a key that does not look like a
+  field name, such as a token or ID in a map-shaped answer, is only
+  counted, never named) and the media type. Never a value, never the body. A non-JSON answer carries its media
   type only. All three are optional; older entries stay valid.
 
   Every outcome is recorded exactly once: a real response, a transport
