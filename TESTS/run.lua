@@ -66,6 +66,8 @@ local specs = {
   "env_choice_spec.lua",
   "usrcmds_help_spec.lua",
   "history_spec.lua",
+  "shape_spec.lua",
+  "traffic_spec.lua",
   "env_spec.lua",
   "curl_spec.lua",
   "assertions_spec.lua",

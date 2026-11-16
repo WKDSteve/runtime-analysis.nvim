@@ -6,8 +6,13 @@
 --- share one history.
 ---
 --- **Request-only, per the roadmap entry's own stated answer to its open
---- question.** Exactly the four fields it names — method, url, status,
---- timestamp — nothing else: no headers, no body, on either side.
+--- question.** The four fields it names — method, url, status, timestamp —
+--- plus metadata *about* the answer, never the answer itself: how long it
+--- took (`duration_ms`), how many bytes its body had (`bytes`) and its
+--- `shape` (top-level JSON type and key names with types, see
+--- `runtime-analysis.shape`). No headers, no body, on either side; all
+--- three extras are optional, so an entry written before they existed
+--- stays valid.
 --- Deliberately narrower than "the request" in full: a header is very
 --- often where the real secret actually lives (`Authorization: Bearer
 --- ...`, the `Auth:` shorthand's own whole reason for existing), and a
@@ -25,6 +30,7 @@
 local disk = require("lib.nvim.cache.disk")
 local project_key = require("lib.nvim.fs.project_key")
 local notify = require("lib.nvim.notify").create("[runtime-analysis]")
+local shape = require("runtime-analysis.shape")
 
 local M = {}
 
@@ -222,6 +228,37 @@ local function read_entries(key, opts)
   return entries or {}, err
 end
 
+---@class RA.History.Measure
+---@field duration_ms integer? Wall time of the request
+---@field bytes integer? Size of the response body
+---@field shape RA.Shape? Shape of the answer, never its content
+
+---@internal
+---@param v any
+---@return integer?
+local function count(v)
+  if type(v) == "number" and v >= 0 and v < math.huge then
+    return math.floor(v)
+  end
+  return nil
+end
+
+---Copy the valid parts of `measure` onto `entry`. Used on write and, with
+---the entry itself as `measure`, on read: a history file is untrusted
+---input (SEC-33), so a hand-edited `shape` or a string `bytes` is dropped
+---rather than handed on to docmap.nvim or a picker.
+---@internal
+---@param entry table
+---@param measure any
+local function apply_measure(entry, measure)
+  if type(measure) ~= "table" then
+    measure = {}
+  end
+  entry.duration_ms = count(measure.duration_ms)
+  entry.bytes = count(measure.bytes)
+  entry.shape = shape.sanitize(measure.shape)
+end
+
 ---Record one send attempt for the current project. Best-effort — a disk
 ---write failing here must never be the reason a request appears to fail;
 ---`disk.save`'s own `ok` return is deliberately not checked, the same
@@ -243,7 +280,9 @@ end
 ---entry point in this plugin already uses); it exists so a test can point
 ---history at an isolated directory instead of the real cache, the same
 ---reason `runtime-analysis.telemetry`'s own `new({ dir = ... })` exists.
-function M.record(method, url, status, note, opts)
+---@param measure? RA.History.Measure What the runner measured about the
+---answer; every field optional, wrong types are dropped.
+function M.record(method, url, status, note, opts, measure)
   require("runtime-analysis.transcript").add(method, M.redact_url(url), status, note)
   local key = cache_key()
   local entries, load_err = read_entries(key, opts)
@@ -271,13 +310,15 @@ function M.record(method, url, status, note, opts)
       e.url = redact(e.url, set)
     end
   end
-  entries[#entries + 1] = {
+  local entry = {
     method = method,
     url = redact(url, set),
     status = status,
     note = final_note,
     at = os.time(),
   }
+  apply_measure(entry, measure)
+  entries[#entries + 1] = entry
   local cap = max_entries()
   if #entries > cap then
     entries = vim.list_slice(entries, #entries - cap + 1, #entries)
@@ -317,6 +358,7 @@ function M.list(opts)
     -- the next write to clean the file.
     if type(e) == "table" then
       e.url = redact(e.url, set)
+      apply_measure(e, e)
     end
     out[#out + 1] = e
   end

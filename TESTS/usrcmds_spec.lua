@@ -12,6 +12,13 @@
 
 return function(H)
   local eq, ok = H.eq, H.ok
+  ---Deep equality (`H.eq` compares tables by reference).
+  local function same(a, b, msg)
+    H.ok(
+      vim.deep_equal(a, b),
+      ("%s: expected %s, got %s"):format(msg, vim.inspect(b), vim.inspect(a))
+    )
+  end
   local uv = vim.uv or vim.loop
 
   require("runtime-analysis").setup({})
@@ -334,6 +341,12 @@ return function(H)
     eq(entries[1].method, "GET", "usrcmds: ... the method actually sent")
     ok(entries[1].url:match("/history%-me$") ~= nil, "usrcmds: ... and the url actually sent")
     eq(entries[1].status, 200, "usrcmds: ... with the real response status")
+    ok(
+      type(entries[1].duration_ms) == "number" and entries[1].duration_ms >= 0,
+      "usrcmds: ... and the measured duration"
+    )
+    eq(entries[1].bytes, 0, "usrcmds: ... and the body size (empty body)")
+    eq(entries[1].shape, nil, "usrcmds: ... and no shape: no Content-Type, no body")
 
     vim.cmd("RA history clear")
     eq(#history.list(), 0, "usrcmds: :RA history clear empties this project's history")
@@ -611,6 +624,65 @@ return function(H)
     )
     vim.api.nvim_win_set_buf(winid, prev_buf)
     vim.api.nvim_buf_delete(export_buf, { force = true })
+  end
+
+  -- A JSON answer: `:RA send` hands duration, size and shape to the history
+  -- (never the body), and `:RA traffic` shows them per endpoint.
+  do
+    local history = require("runtime-analysis.history")
+    history.clear()
+    local body = '{"id":7,"secret":"do-not-store","tags":["a"]}'
+    local json_port, json_server = start_fixed_server(table.concat({
+      "HTTP/1.1 201 Created",
+      "Content-Type: application/json; charset=utf-8",
+      "Content-Length: " .. #body,
+      "",
+      body,
+    }, "\r\n"))
+    local json_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(json_buf, 0, -1, false, {
+      ("GET http://127.0.0.1:%d/items?token=abc"):format(json_port),
+      "",
+    })
+    vim.api.nvim_win_set_buf(winid, json_buf)
+    vim.api.nvim_win_set_cursor(winid, { 1, 0 })
+
+    vim.cmd("RA send")
+    vim.wait(2000, function()
+      return #history.list() == 1
+    end, 10)
+
+    local e = history.list()[1]
+    eq(e and e.status, 201, "usrcmds: the JSON send was recorded")
+    eq(e.bytes, #body, "usrcmds: ... with the body size in bytes")
+    eq(e.shape and e.shape.type, "object", "usrcmds: ... and the top-level JSON type")
+    same(
+      e.shape.keys,
+      { id = "number", secret = "string", tags = "array" },
+      "usrcmds: ... and the key names with types, one level deep"
+    )
+    eq(
+      e.shape.content_type,
+      "application/json",
+      "usrcmds: ... and the media type without parameters"
+    )
+    local stored = table.concat(vim.fn.readfile(history.data_path()), "\n")
+    ok(
+      stored:find("do-not-store", 1, true) == nil,
+      "usrcmds: no value of the answer reaches the history file"
+    )
+
+    vim.cmd("RA traffic")
+    local resp_buf = vim.fn.bufnr("runtime-analysis://response")
+    local shown = table.concat(vim.api.nvim_buf_get_lines(resp_buf, 0, -1, false), "\n")
+    ok(shown:find("/items", 1, true) ~= nil, "usrcmds: :RA traffic lists the endpoint")
+    ok(shown:find("?token", 1, true) == nil, "usrcmds: ... without its query")
+    ok(shown:find("object{id,secret,tags}", 1, true) ~= nil, "usrcmds: ... with the last shape")
+
+    history.clear()
+    json_server:close()
+    vim.api.nvim_win_set_buf(winid, prev_buf)
+    vim.api.nvim_buf_delete(json_buf, { force = true })
   end
 
   vim.api.nvim_win_set_buf(winid, prev_buf)

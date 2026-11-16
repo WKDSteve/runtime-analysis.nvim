@@ -1,6 +1,6 @@
 ---@module 'runtime-analysis.bindings.usrcmds'
 --- Registers `:RA <subcommand>` (`request`/`send`/`yank`/`cancel`/
---- `history`/`history clear`, via `lib.nvim.bindings.usercmd.composer`, the same
+--- `history`/`history clear`/`traffic`, via `lib.nvim.bindings.usercmd.composer`, the same
 --- verb-first shape `:DocMap`, `:MDView` and `:Replace` already use) plus
 --- two flat convenience aliases, `:RARequest` and `:RASend`, for this
 --- plugin's two most-used actions. Split out of `init.lua` into its own
@@ -507,7 +507,9 @@ local function send_current_buffer(ra, asked_block)
           request.method,
           request.url,
           meta and meta.status,
-          (not resp_lines) and run_err or nil
+          (not resp_lines) and run_err or nil,
+          nil,
+          meta
         )
       end
       return
@@ -518,11 +520,15 @@ local function send_current_buffer(ra, asked_block)
       pending_handle = nil
     end
 
+    -- `meta` carries duration, body size and shape; `history.record`
+    -- keeps exactly those three and nothing else of it.
     require("runtime-analysis.history").record(
       request.method,
       request.url,
       meta and meta.status,
-      (not resp_lines) and run_err or nil
+      (not resp_lines) and run_err or nil,
+      nil,
+      meta
     )
 
     if not resp_lines then
@@ -603,7 +609,15 @@ local function browse_history(ra)
   ---@param e RA.History.Entry
   local function format_item(e)
     local outcome = e.status and tostring(e.status) or (e.note or "?")
-    return ("%s  %-10s %-6s %s"):format(os.date("%Y-%m-%d %H:%M", e.at), outcome, e.method, e.url)
+    local traffic = require("runtime-analysis.traffic")
+    return ("%s  %-10s %8s %9s  %-6s %s"):format(
+      os.date("%Y-%m-%d %H:%M", e.at),
+      outcome,
+      traffic.format_ms(e.duration_ms),
+      traffic.format_bytes(e.bytes),
+      e.method,
+      e.url
+    )
   end
 
   ---@param choice RA.History.Entry?
@@ -1085,6 +1099,20 @@ function M.setup(ra)
         desc = "Browse this project's request history and reopen one",
         run = function()
           browse_history(ra)
+        end,
+      },
+      {
+        path = { "traffic" },
+        desc = "Per-endpoint sends, status, duration, size and shape from the history",
+        run = function()
+          local entries, list_err = require("runtime-analysis.history").list()
+          if list_err then
+            notify.warn(("this project's request history could not be read: %s"):format(list_err))
+          end
+          require("runtime-analysis.view").show(
+            require("runtime-analysis.traffic").lines(entries),
+            { split = ra.opts.split }
+          )
         end,
       },
       {

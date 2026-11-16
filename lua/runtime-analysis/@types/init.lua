@@ -26,6 +26,9 @@
 ---@field status integer? HTTP status, or `nil` when the request errored or was cancelled
 ---@field note string? Set only when `status` is `nil` — `"cancelled"`, or the transport error text
 ---@field at integer `os.time()` when this was recorded
+---@field duration_ms integer? Wall time of the send; absent on cancelled sends and on entries older than this field
+---@field bytes integer? Size of the response body; only with a real answer
+---@field shape RA.Shape? Shape of the answer (JSON type, key names with types, media type), never its content
 
 ---`runtime-analysis.provenance.inspect`.s own result. `source` is `nil` only when `debug.getinfo` itself failed (never
 ---observed in practice, still not assumed).

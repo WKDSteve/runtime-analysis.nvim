@@ -9,6 +9,13 @@
 
 return function(H)
   local eq, ok = H.eq, H.ok
+  ---Deep equality (`H.eq` compares tables by reference).
+  local function same(a, b, msg)
+    H.ok(
+      vim.deep_equal(a, b),
+      ("%s: expected %s, got %s"):format(msg, vim.inspect(b), vim.inspect(a))
+    )
+  end
   local history = require("runtime-analysis.history")
 
   -- Nothing recorded yet: an empty list, not an error.
@@ -284,5 +291,61 @@ return function(H)
       "https://a.io/?token=" .. R,
       "record: older entries are redacted on the next write"
     )
+  end
+
+  -- Measurements: duration, size and shape travel with the entry; the rest
+  -- of the runner's meta (body_start, is_json) does not.
+  do
+    local dir = vim.fn.tempname()
+    history.record("GET", "https://a.io/m", 200, nil, { dir = dir }, {
+      duration_ms = 12.6,
+      bytes = 345,
+      shape = { type = "array", items = "object", content_type = "application/json" },
+      body_start = 4,
+      is_json = true,
+    })
+    local e = history.list({ dir = dir })[1]
+    eq(e.duration_ms, 12, "measure: duration in whole milliseconds")
+    eq(e.bytes, 345, "measure: body size")
+    same(
+      e.shape,
+      { type = "array", items = "object", content_type = "application/json" },
+      "measure: the shape"
+    )
+    eq(rawget(e, "body_start"), nil, "measure: nothing else of the meta is stored")
+    eq(rawget(e, "is_json"), nil, "measure: ... not is_json either")
+  end
+
+  -- Old entries without the new fields stay valid; malformed ones are
+  -- dropped on read (SEC-33), never handed on.
+  do
+    local dir = vim.fn.tempname()
+    history.record("GET", "https://a.io/old", 200, nil, { dir = dir })
+    local e = history.list({ dir = dir })[1]
+    same(
+      { e.duration_ms, e.bytes, e.shape },
+      {},
+      "measure: an entry without measurements stays valid"
+    )
+
+    -- Hand-edit the file the way a person (or another tool) could.
+    local path = history.data_path({ dir = dir })
+    local file = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+    file.data[1].bytes = "lots"
+    file.data[1].duration_ms = -5
+    file.data[1].shape = { type = "object", keys = { k = "the-actual-value" } }
+    vim.fn.writefile({ vim.json.encode(file) }, path)
+    e = history.list({ dir = dir })[1]
+    eq(e.bytes, nil, "measure: a non-number size is dropped on read")
+    eq(e.duration_ms, nil, "measure: a negative duration is dropped on read")
+    same(e.shape, { type = "object", keys = {} }, "measure: a key whose type is a value is dropped")
+  end
+
+  -- A cancelled send records no measurement at all.
+  do
+    local dir = vim.fn.tempname()
+    history.record("GET", "https://a.io/c", nil, "cancelled", { dir = dir })
+    local e = history.list({ dir = dir })[1]
+    same({ e.duration_ms, e.bytes, e.shape }, {}, "measure: a cancelled send has none")
   end
 end

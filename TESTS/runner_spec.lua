@@ -12,6 +12,13 @@
 
 return function(H)
   local eq, ok = H.eq, H.ok
+  ---Deep equality (`H.eq` compares tables by reference).
+  local function same(a, b, msg)
+    H.ok(
+      vim.deep_equal(a, b),
+      ("%s: expected %s, got %s"):format(msg, vim.inspect(b), vim.inspect(a))
+    )
+  end
   local runner = require("runtime-analysis.runner")
   local uv = vim.uv or vim.loop
 
@@ -65,6 +72,16 @@ return function(H)
     ok(meta ~= nil, "runner.run: meta is returned alongside lines")
     eq(meta.body_start, 4, "runner.run: meta.body_start points at the first body line")
     eq(meta.is_json, true, "runner.run: meta.is_json true for a real json body")
+    ok(
+      type(meta.duration_ms) == "number" and meta.duration_ms >= 0,
+      "runner.run: meta.duration_ms is measured"
+    )
+    eq(meta.bytes, #'{"ok":true}', "runner.run: meta.bytes is the body size")
+    same(
+      meta.shape,
+      { type = "object", keys = { ok = "boolean" }, content_type = "application/json" },
+      "runner.run: meta.shape is the answer's shape, not its content"
+    )
 
     server:close()
   end
@@ -86,6 +103,11 @@ return function(H)
     })
     eq(lines[4], "not actually json", "runner.run: malformed json falls back to the raw body")
     eq(meta.is_json, false, "runner.run: meta.is_json false when decoding failed")
+    same(
+      meta.shape,
+      { content_type = "application/json" },
+      "runner.run: a body that does not decode keeps the media type only"
+    )
 
     server:close()
   end
@@ -194,13 +216,13 @@ return function(H)
     end, 10)
 
     local called = false
-    local got_lines, got_err
+    local got_lines, got_err, got_meta
     runner.run_async({
       method = "GET",
       url = ("http://127.0.0.1:%d/"):format(port),
-    }, function(lines, err)
+    }, function(lines, err, meta)
       called = true
-      got_lines, got_err = lines, err
+      got_lines, got_err, got_meta = lines, err, meta
     end)
 
     -- A closed local port still takes real time to report "connection
@@ -214,5 +236,10 @@ return function(H)
     ok(called, "runner.run_async: callback fires on failure too")
     eq(got_lines, nil, "runner.run_async: no lines when curl itself failed")
     ok(type(got_err) == "string", "runner.run_async: ... a real error string instead")
+    ok(
+      got_meta and type(got_meta.duration_ms) == "number",
+      "runner.run_async: ... and how long the failure took"
+    )
+    eq(got_meta and got_meta.shape, nil, "runner.run_async: ... but no shape, there was no answer")
   end
 end
