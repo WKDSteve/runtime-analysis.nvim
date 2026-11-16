@@ -3,7 +3,7 @@
 > **Generated** by `docmap`. Do not edit by hand — run `:DocMap`
 > (or `nvim --headless -l scripts/gen_map.lua`) to regenerate.
 
-**4 modules** · 3 namespaces · 42 helper files
+**4 modules** · 3 namespaces · 43 helper files
 
 The [interactive map](index.html) has filtering, full descriptions and
 source links; this page is the version the code host renders directly.
@@ -45,6 +45,7 @@ flowchart LR
   nlua_runtime_analysis_telemetry_cost_vs_use_lua["runtime-analysis.telemetry.cost_vs_use"]
   nlua_runtime_analysis_telemetry_fingerprint_lua["runtime-analysis.telemetry.fingerprint"]
   nlua_runtime_analysis_telemetry_lazy_lua["runtime-analysis.telemetry.lazy"]
+  nlua_runtime_analysis_telemetry_paths_lua["runtime-analysis.telemetry.paths"]
   nlua_runtime_analysis_telemetry_registry_lua["runtime-analysis.telemetry.registry"]
   nlua_runtime_analysis_telemetry_renderers["renderers"]
   nlua_runtime_analysis_telemetry_report_lua["runtime-analysis.telemetry.report"]
@@ -53,6 +54,7 @@ flowchart LR
   nlua_runtime_analysis_telemetry_setup_all_lua["runtime-analysis.telemetry.setup_all"]
   nlua_runtime_analysis_telemetry_startup_lua["runtime-analysis.telemetry.startup"]
   nlua_runtime_analysis_telemetry_store_lua["runtime-analysis.telemetry.store"]
+  nlua_runtime_analysis_telemetry_toggle_lua["runtime-analysis.telemetry.toggle"]
   nlua_runtime_analysis_ui_columns_lua["runtime-analysis.ui.columns"]
   nlua_runtime_analysis_ui_float_lua["runtime-analysis.ui.float"]
   nlua_runtime_analysis_bindings_usrcmds_lua --> nlua_runtime_analysis_startup_profile_lua
@@ -61,6 +63,7 @@ flowchart LR
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_config_lua
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_cost_vs_use_lua
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_lazy_lua
+  nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_paths_lua
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_renderers
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_report_lua
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_telemetry_report_file_lua
@@ -79,6 +82,8 @@ flowchart LR
   nlua_runtime_analysis_telemetry_setup_all_lua --> nlua_runtime_analysis_telemetry_lazy_lua
   nlua_runtime_analysis_telemetry_setup_all_lua --> nlua_runtime_analysis_telemetry_report_file_lua
   nlua_runtime_analysis_telemetry_setup_all_lua --> nlua_runtime_analysis_telemetry_store_lua
+  nlua_runtime_analysis_telemetry_store_lua --> nlua_runtime_analysis_telemetry_paths_lua
+  nlua_runtime_analysis_telemetry_toggle_lua --> nlua_runtime_analysis_telemetry_paths_lua
 ```
 
 
