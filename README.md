@@ -28,6 +28,12 @@ what blocks the main loop — including during startup, where `--startuptime` an
 `:profile` both give up — and a startup profiler that runs `--startuptime`
 enough times for its numbers to survive being read.
 
+Every `:RA send` is recorded per project with its duration, body size and
+response shape (JSON type and key names with types), and `:RA traffic` reads
+that as a measurement per endpoint. Metadata and shapes only, never headers,
+bodies or values; and it covers the recorded sends, not all traffic — see
+[requests](docs/FEATURES/REQUESTS.md#request-history-request-only).
+
 ---
 
 ## Around it
