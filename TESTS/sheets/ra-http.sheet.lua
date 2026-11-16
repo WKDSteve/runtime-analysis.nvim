@@ -1,12 +1,12 @@
 -- Live check: the HTTP request runner of `:RA` against a small server the child editor listens on (task
 -- runtime-analysis.nvim/testblatt-bindings-checkliste; the runtime-analysis sections of
--- BINDINGS-RUNTIME-CHECKLIST.md). Automated: request, send (+ the aliases), yank, env, history, cancel,
--- export, import and diagnose, with an `@expect status` that holds and one that does not.
+-- BINDINGS-RUNTIME-CHECKLIST.md). Automated: request, send (+ the aliases), yank, env, history (with the
+-- measured duration, size and shape), traffic, cancel, export, import and diagnose, with an `@expect status` that holds and one that does not.
 -- Not here: transcript (needs mdview), the look of the response window.
 return {
   id = "runtime-analysis.http",
   feature = "runtime-analysis.requests",
-  title = ":RA request, send, yank, env, history, cancel, export and import",
+  title = ":RA request, send, yank, env, history, traffic, cancel, export and import",
   task = "runtime-analysis.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },
   requires = {
@@ -100,6 +100,23 @@ return {
     {
       expect = [[_G.response():find("cancelled", 1, true) ~= nil]],
       note = ":RA cancel replaces the placeholder",
+    },
+    {
+      expect = [[(function()
+        for _, e in ipairs(require("runtime-analysis.history").list()) do
+          if e.url:find("/ok$") and e.status == 200 then
+            return type(e.duration_ms) == "number" and e.bytes == 11 and e.shape.type == "object"
+              and e.shape.keys.ok == "boolean" and e.shape.content_type == "application/json"
+          end
+        end
+        return false
+      end)()]],
+      note = "the history keeps duration, body size and shape of the /ok answer, never its value",
+    },
+    { keys = ":RA traffic<CR>" },
+    {
+      expect = [[_G.response():find("never content", 1, true) ~= nil and _G.response():find("object{ok}", 1, true) ~= nil and _G.response():find("{{baseUrl}}/ok", 1, true) ~= nil]],
+      note = ":RA traffic shows one row per endpoint with its last shape",
     },
     { lua = [[_G.choose(function() return true end)]] },
     { keys = ":RA history<CR>" },

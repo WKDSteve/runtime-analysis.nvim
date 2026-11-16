@@ -16,6 +16,7 @@ return {
       "command:RA cancel",
       "command:RA history",
       "command:RA history clear",
+      "command:RA traffic",
       "command:RA env",
       "command:RA import",
       "command:RA export",
