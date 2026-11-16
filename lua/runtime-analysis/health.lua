@@ -58,12 +58,12 @@ local DEPS = {
 
 local version_ok = require("lib.nvim.health").version_ok
 
--- Duplicated from `telemetry/init.lua` rather than required from it: that
--- constant is local there on purpose (an internal default, not a public
--- one), and requiring the whole module just to read one path string would
--- pull its `vim.uv`/`cache.disk` setup into a health check that must still
--- report *something* useful when those very dependencies are the problem.
-local DEFAULT_TELEMETRY_CACHE_DIR = vim.fn.stdpath("cache") .. "/runtime-analysis.nvim/cache"
+-- From `telemetry/paths.lua`, which requires nothing else: requiring the
+-- whole telemetry module just to read one path string would pull its
+-- `vim.uv`/`cache.disk` setup into a health check that must still report
+-- *something* useful when those very dependencies are the problem.
+local telemetry_paths = require("runtime-analysis.telemetry.paths")
+local DEFAULT_TELEMETRY_CACHE_DIR = telemetry_paths.DIR
 
 function M.check()
   h_start("runtime-analysis.nvim: environment")
@@ -137,18 +137,29 @@ function M.check()
   else
     h_warn("runtime-analysis.telemetry failed to load", { tostring(telemetry) })
   end
-  h_info("default cache dir: " .. DEFAULT_TELEMETRY_CACHE_DIR)
+  -- Runs the one-time move first, so whatever is still in an old folder
+  -- afterwards really is a conflict and not just "not migrated yet".
+  pcall(telemetry_paths.dir)
+  h_info("store dir: " .. DEFAULT_TELEMETRY_CACHE_DIR)
+  for _, legacy in ipairs(telemetry_paths.LEGACY_DIRS) do
+    if vim.fn.isdirectory(legacy .. "/telemetry") == 1 then
+      h_warn("old telemetry data left in " .. legacy .. "/telemetry", {
+        "Everything in it already exists in the store dir as well, so it was not moved (nothing is overwritten).",
+        "Compare and merge by hand, then delete the old folder.",
+      })
+    end
+  end
   if vim.fn.isdirectory(DEFAULT_TELEMETRY_CACHE_DIR) == 1 then
     local writable = vim.fn.filewritable(DEFAULT_TELEMETRY_CACHE_DIR) == 2
     if writable then
-      h_ok("cache directory exists and is writable")
+      h_ok("store directory exists and is writable")
     else
-      h_warn("cache directory exists but is not writable", {
+      h_warn("store directory exists but is not writable", {
         "Telemetry persistence (`persist = true`, the default) needs this.",
       })
     end
   else
-    h_info("cache directory does not exist yet — created on first flush")
+    h_info("store directory does not exist yet — created on first flush")
   end
 
   h_start("runtime-analysis.nvim: request history")

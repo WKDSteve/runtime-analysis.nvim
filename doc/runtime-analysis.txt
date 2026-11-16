@@ -778,7 +778,8 @@ Telemetry panel counterpart can.
 
 Reports: Neovim version, `curl` on PATH, every required lib.nvim module
 loading, live telemetry instances and persistently disabled namespaces in
-this session, the telemetry cache directory and whether it is writable,
+this session, the telemetry store directory (`stdpath("state")`) and whether
+it is writable, old telemetry data left in the cache,
 this project's history entry count, this project's defined environments
 and which one (if any) is active, whether keymap/command usage tracking
 is running and how many presses it has counted so far, whether mdview.nvim

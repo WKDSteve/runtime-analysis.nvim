@@ -119,11 +119,27 @@ persisted counts.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `namespace` | `"unnamed"` | required in practice; also the on-disk cache key |
-| `dir` | `stdpath("cache")/runtime-analysis.nvim/cache` | cache directory override |
+| `dir` | `stdpath("state")/runtime-analysis.nvim` | store directory override (see [Where the data lives](#where-the-data-lives)) |
 | `retention_days` | `30` | day buckets older than this are pruned on flush |
 | `flush_interval_ms` | `60000` | debounced periodic flush; `0` disables |
 | `remind_after` | `{ days = 7, calls = 50000 }` | lifecycle reminder; `false` opts out |
 | `persist` | `true` | `false` keeps everything in memory |
+
+### Where the data lives
+
+Counters are stored in `stdpath("state")/runtime-analysis.nvim/telemetry/<namespace>.json`
+(snapshots in `<namespace>/snapshots/`, the disable list in `_control.json`, default backups
+in `Backups/`). On Windows that is `%LOCALAPPDATA%\nvim-data\runtime-analysis.nvim`.
+
+Not `stdpath("cache")`: on Windows that is `%TEMP%\nvim`, which Windows and temp cleaners empty,
+and the counters are a history that cannot be rebuilt, so a before/after comparison over a few
+days would lose its "before". Rendered reports (`.md`/`.html`) and default exports stay in the
+cache; they can be regenerated at any time.
+
+Older versions wrote to `stdpath("cache")/runtime-analysis.nvim/cache/telemetry` (and, before
+that, `stdpath("cache")/lib.nvim/cache/telemetry`). The first use in a session moves everything
+from there into the store; nothing already in the store is overwritten, and whatever could not
+be moved for that reason stays where it was and is named by `:checkhealth runtime-analysis`.
 | `max_arg_values` | `32` | distinct fingerprints kept per function |
 | `report_file` | `false` | keep this namespace's Markdown report on disk, rewritten at every flush — see "Browser report" |
 | `info` | `{}` | free-form metadata bundled with the report (branch, version, …) — see "Report metadata" below |
@@ -791,7 +807,7 @@ best-effort: only `export ... .pdf` needs it, everything else works without.
 all read only what THIS Neovim process has instrumented THIS session — a
 plugin nothing has loaded yet, or one instrumented in a process that has
 since exited, is invisible to them. `export-all` instead scans
-`stdpath("cache")/runtime-analysis.nvim/cache/telemetry/*.json` directly
+`stdpath("state")/runtime-analysis.nvim/telemetry/*.json` directly
 (`store.namespaces()`) and builds each namespace's report straight from
 what is on disk (`telemetry.load()` + `report.build()`, no live instance
 required), one `<namespace>.md` file per namespace into the given

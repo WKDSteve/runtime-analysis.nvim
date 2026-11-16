@@ -14,6 +14,7 @@
 ---    wider change affecting every existing caller.
 
 local disk = require("lib.nvim.cache.disk")
+local paths = require("runtime-analysis.telemetry.paths")
 
 local M = {}
 
@@ -147,7 +148,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return string
 function M.data_path(namespace, opts)
-  local dir = (opts and opts.dir) or (vim.fn.stdpath("cache") .. "/lib.nvim/cache")
+  local dir = (opts and opts.dir) or paths.dir()
   return dir .. "/" .. M.cache_key(namespace) .. ".json"
 end
 
@@ -182,7 +183,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return string[] namespaces  # sorted
 function M.namespaces(opts)
-  local root = (opts and opts.dir) or (vim.fn.stdpath("cache") .. "/lib.nvim/cache")
+  local root = (opts and opts.dir) or paths.dir()
   local dir = root .. "/telemetry"
   local uv = vim.uv or vim.loop
 
@@ -252,7 +253,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return string
 function M.snapshot_dir(namespace, opts)
-  local root = (opts and opts.dir) or (vim.fn.stdpath("cache") .. "/lib.nvim/cache")
+  local root = (opts and opts.dir) or paths.dir()
   return root .. "/" .. M.cache_key(namespace) .. "/snapshots"
 end
 

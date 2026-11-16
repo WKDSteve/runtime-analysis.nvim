@@ -143,12 +143,12 @@ local M = {}
 ---setup|full`/`:RATelemetrySetupAll*` and `:RATelemetry reset`/
 ---`:RATelemetryResetAll` used to suggest two different sibling dirs, which
 ---scattered backups of the same data across the cache root depending on
----which command happened to ask. It sits under the telemetry cache dir
----(`DEFAULT_CACHE_DIR` in `telemetry/init.lua`) so a backup lives next to
----the data it is a copy of. Still only a *default*: the prompt is editable
----and any answer is honoured.
-local DEFAULT_BACKUP_DIR = vim.fn.stdpath("cache")
-  .. "/runtime-analysis.nvim/cache/telemetry/Backups"
+---which command happened to ask. It sits under the telemetry store
+---(`telemetry/paths.lua`, outside `stdpath("cache")`) so a backup lives next
+---to the data it is a copy of and survives a temp-folder cleanup just as
+---long. Still only a *default*: the prompt is editable and any answer is
+---honoured.
+local DEFAULT_BACKUP_DIR = require("runtime-analysis.telemetry.paths").DIR .. "/telemetry/Backups"
 
 ---What every backup prompt asks, naming the file it is about to write.
 ---

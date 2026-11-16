@@ -73,6 +73,7 @@ local registry = require("runtime-analysis.telemetry.registry")
 local reminder = require("runtime-analysis.telemetry.reminder")
 local report_file = require("runtime-analysis.telemetry.report_file")
 local report_mod = require("runtime-analysis.telemetry.report")
+local paths = require("runtime-analysis.telemetry.paths")
 local store = require("runtime-analysis.telemetry.store")
 local telemetry_config = require("runtime-analysis.telemetry.config")
 local toggle = require("runtime-analysis.telemetry.toggle")
@@ -152,10 +153,11 @@ local KNOWN_NEW_OPTS = {
 }
 
 -- `cache.disk`'s own hardcoded default is `stdpath("cache")/lib.nvim/cache` —
--- wrong root now that telemetry lives here. Every real caller (an instance's
--- own `opts.dir`, or `M.load()` reading a namespace with no live instance)
--- gets this threaded through explicitly instead of falling through to it.
-local DEFAULT_CACHE_DIR = vim.fn.stdpath("cache") .. "/runtime-analysis.nvim/cache"
+-- wrong root (and a temp folder on Windows). Every real caller (an
+-- instance's own `opts.dir`, or `M.load()` reading a namespace with no live
+-- instance) gets `paths.dir()` threaded through explicitly instead of
+-- falling through to it; see `telemetry/paths.lua` for why it is
+-- `stdpath("state")`.
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -416,7 +418,7 @@ function M.new(opts)
     report_file = opts.report_file or false,
     info = type(opts.info) == "table" and opts.info or {},
   })
-  local cache_opts = { dir = cfg.dir or DEFAULT_CACHE_DIR }
+  local cache_opts = { dir = cfg.dir or paths.dir() }
   local remind_after = opts.remind_after
   if remind_after == nil then
     remind_after = reminder.DEFAULTS
@@ -1287,7 +1289,7 @@ function M.load(namespace, opts)
   if type(namespace) ~= "string" or namespace == "" then
     return nil
   end
-  return store.load_readonly(namespace, opts or { dir = DEFAULT_CACHE_DIR })
+  return store.load_readonly(namespace, opts or { dir = paths.dir() })
 end
 
 ---How many named snapshots a namespace keeps before `M.snapshot` starts
@@ -1342,7 +1344,7 @@ function M.snapshot(namespace, name, opts)
   opts = opts or {}
 
   local inst = M.get(namespace)
-  local cache_opts = (inst and inst._cache_opts) or { dir = DEFAULT_CACHE_DIR }
+  local cache_opts = (inst and inst._cache_opts) or { dir = paths.dir() }
   -- Per-instance `opts.snapshot_retention` (`telemetry.new({snapshot_retention=N,
   -- ...})`) wins when the namespace has a live instance with one set;
   -- `M.SNAPSHOT_RETENTION` is the fallback both for a namespace with no
@@ -1394,7 +1396,7 @@ function M.list_snapshots(namespace, opts)
   local inst = M.get(namespace)
   return store.list_snapshots(
     namespace,
-    opts or (inst and inst._cache_opts) or { dir = DEFAULT_CACHE_DIR }
+    opts or (inst and inst._cache_opts) or { dir = paths.dir() }
   )
 end
 
@@ -1412,7 +1414,7 @@ function M.load_snapshot(namespace, name, opts)
   return store.load_snapshot(
     namespace,
     name,
-    opts or (inst and inst._cache_opts) or { dir = DEFAULT_CACHE_DIR }
+    opts or (inst and inst._cache_opts) or { dir = paths.dir() }
   )
 end
 
@@ -1502,7 +1504,7 @@ end
 ---@return string[] failed   # namespaces that had data but could not be written
 function M.export_all(target_dir, opts)
   opts = opts or {}
-  local cache_opts = { dir = opts.dir or DEFAULT_CACHE_DIR }
+  local cache_opts = { dir = opts.dir or paths.dir() }
 
   local written, failed = {}, {}
   for _, namespace in ipairs(store.namespaces(cache_opts)) do
@@ -1576,7 +1578,7 @@ end
 ---@param opts? { dir?: string }
 ---@return string[] namespaces
 function M.known_namespaces(opts)
-  local cache_opts = { dir = (opts and opts.dir) or DEFAULT_CACHE_DIR }
+  local cache_opts = { dir = (opts and opts.dir) or paths.dir() }
 
   local names, seen = {}, {}
   for _, namespace in ipairs(store.namespaces(cache_opts)) do
@@ -1619,7 +1621,7 @@ end
 ---@return RA.Telemetry.StatusRow[]
 function M.status_reports(opts)
   opts = opts or {}
-  local cache_opts = { dir = opts.dir or DEFAULT_CACHE_DIR }
+  local cache_opts = { dir = opts.dir or paths.dir() }
 
   local live_by_ns = {}
   for _, inst in ipairs(instances) do

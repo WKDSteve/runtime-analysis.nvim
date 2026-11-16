@@ -24,7 +24,7 @@
 --- run" is a cross-session user decision that has to be readable before any
 --- particular instance's options are known — a namespace can be disabled
 --- before it has ever loaded. The optional `opts.dir` on every function below
---- exists only so tests do not read/write the real `stdpath("cache")`; real
+--- exists only so tests do not read/write the real store (`telemetry/paths.lua`); real
 --- callers never pass it.
 
 local disk = require("lib.nvim.cache.disk")
@@ -34,9 +34,9 @@ local M = {}
 
 local CACHE_KEY = "telemetry/_control"
 -- `disk`'s own hardcoded default is `stdpath("cache")/lib.nvim/cache` — wrong
--- root now that telemetry lives here, so real callers (opts == nil below) get
--- this default threaded through explicitly instead.
-local DEFAULT_DIR = vim.fn.stdpath("cache") .. "/runtime-analysis.nvim/cache"
+-- root (and a temp folder on Windows), so real callers (opts == nil below)
+-- get `paths.dir()` threaded through explicitly instead.
+local paths = require("runtime-analysis.telemetry.paths")
 
 ---@type table<string, boolean>|nil
 local disabled = nil
@@ -90,7 +90,7 @@ local function load(opts)
   if disabled then
     return disabled
   end
-  local ok, data, err = pcall(disk.load, CACHE_KEY, { dir = DEFAULT_DIR })
+  local ok, data, err = pcall(disk.load, CACHE_KEY, { dir = paths.dir() })
   if ok and type(data) == "table" and type(data.disabled) == "table" then
     disabled = data.disabled
   else
@@ -106,7 +106,7 @@ end
 ---@param d table<string, boolean>
 ---@param opts? Lib.Cache.Opts
 local function persist(d, opts)
-  pcall(disk.save, CACHE_KEY, { disabled = d }, opts or { dir = DEFAULT_DIR })
+  pcall(disk.save, CACHE_KEY, { disabled = d }, opts or { dir = paths.dir() })
 end
 
 ---@param namespace string

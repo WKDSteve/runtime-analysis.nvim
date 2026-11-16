@@ -1240,12 +1240,69 @@ return function(H)
   -- wrong place after the module moved.
   -- -------------------------------------------------------------------------
   do
+    local paths = require("runtime-analysis.telemetry.paths")
     local t = telemetry.new({ namespace = ns("cache_dir_default"), persist = false })
     H.eq(
       t._cache_opts.dir,
-      vim.fn.stdpath("cache") .. "/runtime-analysis.nvim/cache",
-      "no opts.dir given -> resolves under runtime-analysis.nvim's cache root"
+      vim.fn.stdpath("state") .. "/runtime-analysis.nvim",
+      "no opts.dir given -> resolves under runtime-analysis.nvim's state root"
     )
+    H.eq(paths.DIR, t._cache_opts.dir, "paths.DIR is the default every caller uses")
+    -- On Windows stdpath("cache") is %TEMP%/nvim, which temp cleaners empty:
+    -- the accumulated counters must never default to living under it.
+    local cache_root = vim.fs.normalize(vim.fn.stdpath("cache"))
+    H.eq(
+      vim.fs.normalize(paths.DIR):sub(1, #cache_root) == cache_root,
+      false,
+      "the telemetry store is not under stdpath('cache')"
+    )
+    H.eq(store.data_path("x"), paths.DIR .. "/telemetry/x.json", "store fallback is the store dir")
+  end
+
+  -- -------------------------------------------------------------------------
+  -- paths.migrate: the one-time move out of the old cache roots. Moves what
+  -- the store dir lacks (files, snapshot dirs, merging into dirs both sides
+  -- have), never overwrites, and leaves a conflicting old file in place.
+  -- -------------------------------------------------------------------------
+  do
+    local paths = require("runtime-analysis.telemetry.paths")
+    local base = vim.fn.tempname() .. "-migrate"
+    local old_new = base .. "/cache/runtime-analysis.nvim/cache"
+    local old_lib = base .. "/cache/lib.nvim/cache"
+    local root = base .. "/state/runtime-analysis.nvim"
+    local function write(path, text)
+      vim.fn.mkdir(vim.fs.dirname(path), "p")
+      vim.fn.writefile({ text }, path)
+    end
+    local function read(path)
+      return vim.fn.filereadable(path) == 1 and vim.fn.readfile(path)[1] or nil
+    end
+    write(old_new .. "/telemetry/a.json", "old-a")
+    write(old_new .. "/telemetry/both.json", "old-both")
+    write(old_new .. "/telemetry/a/snapshots/s1.json", "snap")
+    write(old_new .. "/telemetry/Backups/a-1.json", "backup")
+    write(old_lib .. "/telemetry/lib.json", "lib")
+    write(old_lib .. "/telemetry/a.json", "older-a")
+    write(root .. "/telemetry/both.json", "new-both")
+    write(root .. "/telemetry/Backups/b-1.json", "new-backup")
+
+    local moved, kept = paths.migrate({ old_new, old_lib }, root)
+
+    H.eq(read(root .. "/telemetry/a.json"), "old-a", "missing file moved")
+    H.eq(read(root .. "/telemetry/a/snapshots/s1.json"), "snap", "snapshot dir moved")
+    H.eq(read(root .. "/telemetry/Backups/a-1.json"), "backup", "merged into an existing dir")
+    H.eq(read(root .. "/telemetry/Backups/b-1.json"), "new-backup", "existing entry untouched")
+    H.eq(read(root .. "/telemetry/lib.json"), "lib", "lib.nvim-era file moved too")
+    H.eq(read(root .. "/telemetry/both.json"), "new-both", "never overwrites the store")
+    H.eq(read(old_new .. "/telemetry/both.json"), "old-both", "conflicting old file kept")
+    H.eq(read(old_lib .. "/telemetry/a.json"), "older-a", "older duplicate kept, newer one won")
+    H.eq(read(old_new .. "/telemetry/a.json"), nil, "moved, not copied")
+    H.eq(moved, 4, "four entries moved (a.json, a/, Backups/a-1.json, lib.json)")
+    H.eq(#kept, 2, "two conflicts reported")
+
+    local again = paths.migrate({ old_new, old_lib }, root)
+    H.eq(again, 0, "running again moves nothing")
+    vim.fn.delete(base, "rf")
   end
 
   -- -------------------------------------------------------------------------
@@ -3225,7 +3282,7 @@ return function(H)
     -- No live instance, so `M.snapshot` reads/writes via DEFAULT_CACHE_DIR
     -- (the real one) rather than `tmpdir` -- clear it after, same
     -- self-healing pattern the real end-to-end block above already uses.
-    local real_cache_dir = vim.fn.stdpath("cache") .. "/runtime-analysis.nvim/cache"
+    local real_cache_dir = require("runtime-analysis.telemetry.paths").DIR
     store.save(namespace, data, { dir = real_cache_dir })
     for i = 1, 4 do
       telemetry.snapshot(namespace, "n" .. i)
