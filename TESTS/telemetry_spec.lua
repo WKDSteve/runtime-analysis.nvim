@@ -1306,6 +1306,77 @@ return function(H)
   end
 
   -- -------------------------------------------------------------------------
+  -- The automatic move, end to end: a fresh Neovim with its cache/state
+  -- folders pointed at a temp dir finds the old store under stdpath("cache"),
+  -- and its first telemetry use (here the startup `is_disabled` check) moves
+  -- it under stdpath("state") with no explicit call. This is what a user sees
+  -- after updating the plugin, so it runs in a real child process rather than
+  -- against `paths.migrate` with hand-made directories.
+  -- -------------------------------------------------------------------------
+  do
+    local base = vim.fs.normalize(vim.fn.tempname() .. "-e2e")
+    local env = { XDG_CACHE_HOME = base .. "/cache", XDG_STATE_HOME = base .. "/state" }
+    ---The plugin root and lib.nvim's root, as this process found them.
+    ---@param file string
+    ---@param depth integer
+    local function root_of(file, depth)
+      local dir = vim.api.nvim_get_runtime_file(file, false)[1]
+      for _ = 1, depth do
+        dir = vim.fs.dirname(dir)
+      end
+      return vim.fs.normalize(dir)
+    end
+    local roots = {
+      root_of("lua/runtime-analysis/telemetry/paths.lua", 4),
+      root_of("lua/lib/nvim/cache/disk.lua", 5),
+    }
+    local function child(lua)
+      local script = ("vim.opt.rtp:prepend(%q) vim.opt.rtp:prepend(%q) %s"):format(
+        roots[1],
+        roots[2],
+        lua
+      )
+      local cmd = { vim.v.progpath, "--headless", "-n", "-i", "NONE", "-u", "NONE" }
+      vim.list_extend(cmd, { "--cmd", "lua " .. script, "--cmd", "qa!" })
+      return vim.system(cmd, { env = env, text = true }):wait(30000)
+    end
+    local probe =
+      child('io.stdout:write(vim.fn.stdpath("cache") .. "|" .. vim.fn.stdpath("state"))')
+    local lines = vim.split(vim.trim(probe.stdout or ""), "|", { plain = true })
+    local cache, state = vim.fs.normalize(lines[1] or ""), vim.fs.normalize(lines[2] or "")
+    H.eq(
+      cache:find(base, 1, true) == 1 and state:find(base, 1, true) == 1,
+      true,
+      "child uses the temp folders: " .. vim.inspect(probe)
+    )
+
+    local legacy = cache .. "/runtime-analysis.nvim/cache/telemetry"
+    vim.fn.mkdir(legacy, "p")
+    vim.fn.writefile({ '{"saved_at":1,"data":{"version":1}}' }, legacy .. "/old.ns.json")
+    vim.fn.writefile(
+      { '{"saved_at":1,"data":{"disabled":{"off.ns":true}}}' },
+      legacy .. "/_control.json"
+    )
+
+    local res = child(
+      'io.stdout:write(tostring(require("runtime-analysis.telemetry.toggle").is_disabled("off.ns")))'
+    )
+    H.eq(
+      res.stdout,
+      "true",
+      "the old disable list is read from its new place: " .. vim.inspect(res)
+    )
+    local store_dir = state .. "/runtime-analysis.nvim/telemetry"
+    H.eq(
+      vim.fn.filereadable(store_dir .. "/old.ns.json"),
+      1,
+      "old counters moved into stdpath('state')"
+    )
+    H.eq(vim.fn.isdirectory(legacy), 0, "nothing left under stdpath('cache')")
+    vim.fn.delete(base, "rf")
+  end
+
+  -- -------------------------------------------------------------------------
   -- reset(): the module-id map is repopulated from the still-wrapped targets
   -- immediately, not left empty until something calls wrap() again -- reset()
   -- promises "wrapping is untouched", and the module map is a property of the

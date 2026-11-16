@@ -254,7 +254,9 @@ function M.collect()
   section("Cache")
   local cache = vim.fn.stdpath("cache")
   local store_dir = require("runtime-analysis.telemetry.paths").DIR
-  for _, dir in ipairs({ cache .. "/runtime-analysis", cache .. "/lib.nvim/cache", store_dir }) do
+  -- runtime-analysis.nvim/ holds the rendered reports (and the old telemetry
+  -- store, `cache/`, until it is moved); lib.nvim/cache the request history.
+  for _, dir in ipairs({ cache .. "/runtime-analysis.nvim", cache .. "/lib.nvim/cache", store_dir }) do
     if vim.fn.isdirectory(dir) == 1 then
       local bytes, cut = folder_size(dir)
       kv(dir, ("%d bytes%s"):format(bytes, cut and " or more (walk stopped)" or ""))

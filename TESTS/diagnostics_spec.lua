@@ -128,6 +128,17 @@ return function(H)
   ok(text:find("off.ns", 1, true), "a namespace disabled for good")
   ok(text:find("dev, prod", 1, true), "the names of the environments")
   ok(text:find("lib.nvim", 1, true), "the siblings")
+  -- The folders this plugin actually writes: its own cache folder (not a
+  -- `runtime-analysis` one without `.nvim`, which nothing creates) and the
+  -- telemetry store outside the cache.
+  ok(
+    text:find(vim.fn.stdpath("cache") .. "/runtime-analysis.nvim:", 1, true),
+    "the plugin's cache folder"
+  )
+  ok(
+    text:find(require("runtime-analysis.telemetry.paths").DIR, 1, true),
+    "the telemetry store folder"
+  )
   ok(text:find("entries of this project:%s+2"), "the size of the history")
   ok(not text:find("s3cret", 1, true), "no URL of the history and no secret option: " .. text)
   eq(started, false, "nothing is started or flushed")
