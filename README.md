@@ -115,4 +115,5 @@ runtime-analysis.nvim is released under the [MIT License](https://opensource.org
 
 - [docmap-desktop](https://github.com/WKDSteve/docmap-desktop): docmap-desktop shows the telemetry runtime-analysis.nvim collects inside Neovim and can switch collection on for a project; it never measures itself. ([picture](assets/graphs/pair/docmap-desktop--runtime-analysis.nvim.png))
 - [docmap.nvim](https://github.com/WKDSteve/docmap.nvim): docmap.nvim joins its static map with the counts runtime-analysis.nvim collects: which routes ran, and how often. ([picture](assets/graphs/pair/docmap.nvim--runtime-analysis.nvim.png))
+- [ui.nvim](https://github.com/WKDSteve/ui.nvim): The statusline module `runtime_analysis_ampel` of ui.nvim shows the traffic light of runtime-analysis.nvim, once runtime-analysis.nvim is loaded. ([picture](assets/graphs/pair/ui.nvim--runtime-analysis.nvim.png))
 <!-- connections:end -->
