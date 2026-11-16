@@ -1373,6 +1373,40 @@ return function(H)
       "old counters moved into stdpath('state')"
     )
     H.eq(vim.fn.isdirectory(legacy), 0, "nothing left under stdpath('cache')")
+
+    -- The point of the move: counts recorded in one session are still there
+    -- in the next one after stdpath("cache") was emptied completely (what a
+    -- temp cleaner does to %TEMP%\nvim on Windows).
+    local recorded = child(table.concat({
+      'local inst = require("runtime-analysis.telemetry").new({ namespace = "kept.ns", persist = true })',
+      "local m = { f = function() end }",
+      'inst.wrap(m, "m")',
+      "inst.start() m.f() m.f() m.f() inst.flush() inst.stop()",
+    }, " "))
+    H.eq(recorded.code, 0, "recording child exits cleanly: " .. vim.inspect(recorded))
+    vim.fn.delete(cache, "rf")
+    H.eq(vim.fn.isdirectory(cache), 0, "stdpath('cache') is gone")
+    local sum_calls = table.concat({
+      'local d, err = require("runtime-analysis.telemetry").load("kept.ns")',
+      "local n = 0",
+      "for _, s in pairs(d and d.functions or {}) do n = n + (s.calls or 0) end",
+      'io.stdout:write(tostring(n) .. "|" .. tostring(err))',
+    }, " ")
+    local survived = child(sum_calls)
+    H.eq(
+      survived.stdout,
+      "3|nil",
+      "counts survive deleting stdpath('cache'): " .. vim.inspect(survived)
+    )
+
+    -- A brand-new install (nothing under cache or state) is no error: no
+    -- data and no message.
+    local fresh_base = vim.fs.normalize(vim.fn.tempname() .. "-fresh")
+    env = { XDG_CACHE_HOME = fresh_base .. "/cache", XDG_STATE_HOME = fresh_base .. "/state" }
+    local fresh = child(sum_calls)
+    H.eq(fresh.stdout, "0|nil", "empty store: no counts, no error: " .. vim.inspect(fresh))
+    H.eq(fresh.stderr, "", "empty store: nothing reported")
+    vim.fn.delete(fresh_base, "rf")
     vim.fn.delete(base, "rf")
   end
 
