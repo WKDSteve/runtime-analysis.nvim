@@ -185,7 +185,11 @@ function M.sanitize(raw)
       keys[cap(names[i])] = raw.keys[names[i]]
     end
     out.keys = keys
-    local more = (type(raw.more) == "number" and raw.more >= 1) and math.floor(raw.more) or 0
+    -- Finite only: `1e999` in the file decodes to `inf`, which
+    -- `vim.json.encode` refuses, and the next history write would fail.
+    local more = (type(raw.more) == "number" and raw.more >= 1 and raw.more < math.huge)
+        and math.floor(raw.more)
+      or 0
     more = more + math.max(#names - M.MAX_KEYS, 0)
     if more > 0 then
       out.more = more

@@ -339,6 +339,18 @@ return function(H)
     eq(e.bytes, nil, "measure: a non-number size is dropped on read")
     eq(e.duration_ms, nil, "measure: a negative duration is dropped on read")
     same(e.shape, { type = "object", keys = {} }, "measure: a key whose type is a value is dropped")
+
+    -- `1e999` decodes to `inf`, which `vim.json.encode` refuses: neither the
+    -- read nor the next write may carry it on.
+    local raw = table.concat(vim.fn.readfile(path), "\n")
+    raw =
+      raw:gsub('"keys":', '"more":1e999,"keys":', 1):gsub('"at":', '"duration_ms":1e999,"at":', 1)
+    vim.fn.writefile({ raw }, path)
+    e = history.list({ dir = dir })[1]
+    eq(e.shape.more, nil, "measure: an infinite key count is dropped on read")
+    eq(e.duration_ms, nil, "measure: an infinite duration is dropped on read")
+    history.record("GET", "https://a.io/next", 200, nil, { dir = dir })
+    eq(#history.list({ dir = dir }), 2, "measure: ... and the next write still saves")
   end
 
   -- A cancelled send records no measurement at all.

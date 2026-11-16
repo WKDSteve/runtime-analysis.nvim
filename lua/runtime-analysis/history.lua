@@ -303,11 +303,14 @@ function M.record(method, url, status, note, opts, measure)
   end
   -- Entries stored before redaction existed (or under a shorter key list)
   -- still carry their secrets on disk; redaction is idempotent, so one pass
-  -- per write cleans them without a migration step.
+  -- per write cleans them without a migration step. The measured fields get
+  -- the same one pass (SEC-33): a hand-edited value `vim.json.encode`
+  -- refuses would otherwise make this and every later save fail silently.
   local set = secret_key_set()
   for _, e in ipairs(entries) do
     if type(e) == "table" then
       e.url = redact(e.url, set)
+      apply_measure(e, e)
     end
   end
   local entry = {
