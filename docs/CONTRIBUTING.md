@@ -114,6 +114,13 @@ enough to contain `lib.nvim.fs.write.atomic`. `TESTS/run.lua` is kept as the
 manifest of the spec order and as a runner-free fallback
 (`nvim --headless -u NONE -l TESTS/run.lua`).
 
+No spec run touches your real `stdpath("state")` / `stdpath("cache")` (where
+the telemetry store lives): testing.nvim gives every spec file a child editor
+with its own stdpaths, and `TESTS/run.lua` first points `$XDG_STATE_HOME` /
+`$XDG_CACHE_HOME` at a throwaway folder in its temp directory
+(`TESTS/isolate_state.lua`) and prints both paths. `RA_RUN_SPECS=a_spec.lua,b_spec.lua`
+limits `TESTS/run.lua` to those manifest entries.
+
 Exit 0 is a pass. [GitHub Actions](../.github/workflows/ci.yml) runs it plus
 luacheck, regenerates the module map, and force-pushes `ci-verified` to the
 tested commit so dependent repositories can pin a known-good state.

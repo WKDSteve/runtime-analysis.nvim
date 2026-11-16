@@ -6,6 +6,14 @@
 -- Loads every *_spec.lua listed below, runs it against the shared harness,
 -- prints a per-spec result, and exits non-zero on the first failing spec.
 
+local here = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") or "./"
+
+-- Before anything computes a path: state and cache go to a throwaway folder,
+-- so no spec writes into the user's real telemetry store (TESTS/isolate_state.lua).
+local isolated = dofile(here .. "isolate_state.lua")()
+io.stdout:write(("stdpath('state'): %s (was %s)\n"):format(isolated.state, isolated.state_before))
+io.stdout:write(("stdpath('cache'): %s (was %s)\n"):format(isolated.cache, isolated.cache_before))
+
 -- Make the repo importable whether invoked via -l (cwd) or luafile.
 vim.opt.rtp:append(vim.fn.getcwd())
 
@@ -44,8 +52,7 @@ end
 
 add_lib_nvim()
 
-local dir = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") or "./"
-local H = dofile(dir .. "harness.lua")
+local H = dofile(here .. "harness.lua")
 
 local specs = {
   "parse_spec.lua",
@@ -85,7 +92,30 @@ local specs = {
   "config_validate_spec.lua",
   "statusline_spec.lua",
   "columns_spec.lua",
+  "isolate_state_spec.lua",
 }
+
+-- RA_RUN_SPECS=a_spec.lua,b_spec.lua runs only those (in manifest order); a
+-- name that is not in the manifest above is refused with exit 2.
+local only = vim.env.RA_RUN_SPECS
+if only and only ~= "" then
+  local wanted, known = {}, {}
+  for _, name in ipairs(specs) do
+    known[name] = true
+  end
+  for name in only:gmatch("[^,%s]+") do
+    if not known[name] then
+      io.stderr:write(
+        ("TESTS/run.lua: RA_RUN_SPECS names %s, which is not in the manifest\n"):format(name)
+      )
+      os.exit(2)
+    end
+    wanted[name] = true
+  end
+  specs = vim.tbl_filter(function(name)
+    return wanted[name] == true
+  end, specs)
+end
 
 --- Straight to stdout rather than through `print` — the same reason
 --- docmap.nvim's own runner gives: `print` in a headless Neovim goes
@@ -98,7 +128,7 @@ end
 
 local failed = 0
 for _, name in ipairs(specs) do
-  local run = dofile(dir .. name)
+  local run = dofile(here .. name)
   local ok, err = pcall(run, H)
   if ok then
     say(("ok    %s"):format(name))
