@@ -77,6 +77,31 @@ function M.empty()
   }
 end
 
+--- Upper bounds (exclusive, ms) of the duration buckets; a call at or above
+--- the last bound lands in the extra last bucket. Coarse on purpose: five
+--- integers per function are enough to tell free calls (< 1 ms) and outliers
+--- (>= 1 s) apart from the bulk, and they cost nothing to merge.
+M.BUCKET_BOUNDS = { 1, 10, 100, 1000 }
+
+--- Number of buckets (`#M.BUCKET_BOUNDS + 1`).
+M.BUCKETS = #M.BUCKET_BOUNDS + 1
+
+---Index of the bucket `dur` (ms) falls into.
+---@param dur number
+---@return integer
+function M.bucket_of(dur)
+  if dur < 1 then
+    return 1
+  elseif dur < 10 then
+    return 2
+  elseif dur < 100 then
+    return 3
+  elseif dur < 1000 then
+    return 4
+  end
+  return 5
+end
+
 ---Normalize whatever came back from disk into the current shape.
 ---@internal
 ---@param raw any
@@ -424,6 +449,17 @@ function M.count_keys(t)
   return n
 end
 
+---Rounded to a microsecond: the new per-bucket and per-day sums are stored
+---once per function and day, and full-precision floats were most of their
+---bytes (measured on real data: +62 % file size unrounded as a separate
+---map, +33 % rounded and nested per function).
+---@internal
+---@param ms number
+---@return number
+local function round_ms(ms)
+  return math.floor(ms * 1000 + 0.5) / 1000
+end
+
 ---@internal
 ---@param dst RA.Telemetry.Timing
 ---@param src RA.Telemetry.Timing
@@ -432,6 +468,37 @@ local function merge_timing(dst, src)
   dst.total_ms = (dst.total_ms or 0) + (src.total_ms or 0)
   dst.min_ms = math.min(dst.min_ms or math.huge, src.min_ms or math.huge)
   dst.max_ms = math.max(dst.max_ms or 0, src.max_ms or 0)
+  -- Buckets exist only on data recorded since they were introduced. A `dst`
+  -- from an older file has none: it starts its histogram at zero, so the
+  -- bucket counts then cover fewer calls than `n` (the report says so).
+  if type(src.buckets) == "table" then
+    dst.buckets = type(dst.buckets) == "table" and dst.buckets or {}
+    dst.bucket_ms = type(dst.bucket_ms) == "table" and dst.bucket_ms or {}
+    local src_ms = type(src.bucket_ms) == "table" and src.bucket_ms or {}
+    for i = 1, M.BUCKETS do
+      dst.buckets[i] = (tonumber(dst.buckets[i]) or 0) + (tonumber(src.buckets[i]) or 0)
+      dst.bucket_ms[i] = round_ms((tonumber(dst.bucket_ms[i]) or 0) + (tonumber(src_ms[i]) or 0))
+    end
+  end
+  if type(src.days) == "table" then
+    dst.days = type(dst.days) == "table" and dst.days or {}
+    for day, row in pairs(src.days) do
+      if type(row) == "table" then
+        local cur = dst.days[day]
+        if type(cur) ~= "table" then
+          dst.days[day] = {
+            tonumber(row[1]) or 0,
+            round_ms(tonumber(row[2]) or 0),
+            round_ms(tonumber(row[3]) or 0),
+          }
+        else
+          cur[1] = (tonumber(cur[1]) or 0) + (tonumber(row[1]) or 0)
+          cur[2] = round_ms((tonumber(cur[2]) or 0) + (tonumber(row[2]) or 0))
+          cur[3] = round_ms(math.max(tonumber(cur[3]) or 0, tonumber(row[3]) or 0))
+        end
+      end
+    end
+  end
 end
 
 ---Add `delta` into `base`, in place. Both are `RA.Telemetry.Data`-shaped;
@@ -528,6 +595,16 @@ function M.prune(data, days)
     if day < cutoff then
       data.days[day] = nil
       dropped = dropped + 1
+    end
+  end
+  for _, fn in pairs(data.functions or {}) do
+    local timing_days = type(fn) == "table" and type(fn.timing) == "table" and fn.timing.days
+    if type(timing_days) == "table" then
+      for day in pairs(timing_days) do
+        if day < cutoff then
+          timing_days[day] = nil
+        end
+      end
     end
   end
   return dropped

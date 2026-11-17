@@ -75,6 +75,7 @@ local report_file = require("runtime-analysis.telemetry.report_file")
 local report_mod = require("runtime-analysis.telemetry.report")
 local paths = require("runtime-analysis.telemetry.paths")
 local store = require("runtime-analysis.telemetry.store")
+local bucket_of = store.bucket_of
 local telemetry_config = require("runtime-analysis.telemetry.config")
 local toggle = require("runtime-analysis.telemetry.toggle")
 local config_validate = require("runtime-analysis.config.validate")
@@ -536,9 +537,18 @@ function M.new(opts)
     end
 
     if dur then
+      local b = bucket_of(dur)
       local t = s.timing
       if not t then
-        s.timing = { n = 1, total_ms = dur, min_ms = dur, max_ms = dur }
+        t = {
+          n = 1,
+          total_ms = dur,
+          min_ms = dur,
+          max_ms = dur,
+          buckets = { 0, 0, 0, 0, 0 },
+          bucket_ms = { 0, 0, 0, 0, 0 },
+        }
+        s.timing = t
       else
         t.n = t.n + 1
         t.total_ms = t.total_ms + dur
@@ -547,6 +557,27 @@ function M.new(opts)
         end
         if dur > t.max_ms then
           t.max_ms = dur
+        end
+      end
+      t.buckets[b] = t.buckets[b] + 1
+      t.bucket_ms[b] = t.bucket_ms[b] + dur
+
+      -- The same day key the call count above uses, so a day's timing and
+      -- its call count describe the same calls. `{ n, total_ms, max_ms }`
+      -- as an array: one row per function and day is the bulk of the file.
+      local days = t.days
+      if not days then
+        days = {}
+        t.days = days
+      end
+      local d = days[today]
+      if not d then
+        days[today] = { 1, dur, dur }
+      else
+        d[1] = d[1] + 1
+        d[2] = d[2] + dur
+        if dur > d[3] then
+          d[3] = dur
         end
       end
     end

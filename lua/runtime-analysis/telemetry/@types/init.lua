@@ -104,6 +104,9 @@
 ---@field total_ms number
 ---@field min_ms number
 ---@field max_ms number
+---@field buckets? integer[]   # calls per duration bucket (< 1, < 10, < 100, < 1000, >= 1000 ms; store.BUCKET_BOUNDS); absent on data recorded before buckets existed, and then covering fewer calls than `n`
+---@field bucket_ms? number[]  # summed ms per bucket, parallel to `buckets`
+---@field days? table<string, number[]>  # "YYYY-MM-DD" -> { n, total_ms, max_ms } of that day's timed calls; pruned with `Data.days`
 
 ---@class RA.Telemetry.ArgStats
 ---@field values table<string, integer>  # fingerprint -> count
@@ -136,6 +139,14 @@
 ---@field mean_ms? number
 ---@field min_ms? number
 ---@field max_ms? number
+---@field timing_n? integer          # timed calls behind mean/min/max
+---@field buckets? integer[]         # calls per duration bucket (report.BUCKET_LABELS)
+---@field bucketed? integer          # calls the buckets cover (< timing_n when older data had none)
+---@field median_bucket? integer     # index of the bucket holding the median call
+---@field outliers? integer          # calls >= 1 s
+---@field outlier_share? number      # share of the bucketed time spent in calls >= 1 s
+---@field mean_ms_without_outliers? number
+---@field days? { day: string, n: integer, mean_ms: number, max_ms: number }[]  # per-day timing, oldest first
 ---@field args? { fingerprint: string, count: number, share: number }[]
 ---@field other? integer
 ---@field distinct? integer

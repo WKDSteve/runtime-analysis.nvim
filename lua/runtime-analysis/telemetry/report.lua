@@ -105,6 +105,76 @@ local function top_fingerprints(stats, total)
   return list, stats.other or 0, stats.distinct or 0
 end
 
+--- Display label per duration bucket, parallel to `store.BUCKET_BOUNDS`.
+M.BUCKET_LABELS = { "< 1 ms", "< 10 ms", "< 100 ms", "< 1 s", "≥ 1 s" }
+
+---Fill the distribution fields of `entry` from `timing.buckets`: per-bucket
+---counts, the bucket holding the median call, and how many calls (and what
+---share of the bucketed time) were outliers (`>= 1 s`). Leaves `entry`
+---untouched for data recorded before buckets existed.
+---@internal
+---@param entry RA.Telemetry.ReportEntry
+---@param timing RA.Telemetry.Timing
+local function distribution(entry, timing)
+  local buckets = timing.buckets
+  if type(buckets) ~= "table" then
+    return
+  end
+  local counts, n, total_ms = {}, 0, 0
+  local bucket_ms = type(timing.bucket_ms) == "table" and timing.bucket_ms or {}
+  for i = 1, store.BUCKETS do
+    counts[i] = tonumber(buckets[i]) or 0
+    n = n + counts[i]
+    total_ms = total_ms + (tonumber(bucket_ms[i]) or 0)
+  end
+  if n == 0 then
+    return
+  end
+  local half, seen = n / 2, 0
+  for i = 1, store.BUCKETS do
+    seen = seen + counts[i]
+    if seen >= half then
+      entry.median_bucket = i
+      break
+    end
+  end
+  local top = store.BUCKETS
+  local outlier_ms = tonumber(bucket_ms[top]) or 0
+  entry.buckets = counts
+  entry.bucketed = n
+  entry.outliers = counts[top]
+  entry.outlier_share = total_ms > 0 and outlier_ms / total_ms or 0
+  if counts[top] > 0 and n > counts[top] then
+    entry.mean_ms_without_outliers = (total_ms - outlier_ms) / (n - counts[top])
+  end
+end
+
+---One row per day `timing.days` holds, oldest first.
+---@internal
+---@param timing_days table<string, number[]>|nil
+---@return { day: string, n: integer, mean_ms: number, max_ms: number }[]|nil
+local function day_rows(timing_days)
+  local rows = {}
+  for day, d in pairs(type(timing_days) == "table" and timing_days or {}) do
+    local n = type(d) == "table" and tonumber(d[1]) or 0
+    if n > 0 then
+      rows[#rows + 1] = {
+        day = day,
+        n = n,
+        mean_ms = (tonumber(d[2]) or 0) / n,
+        max_ms = tonumber(d[3]) or 0,
+      }
+    end
+  end
+  if #rows == 0 then
+    return nil
+  end
+  table.sort(rows, function(a, b)
+    return a.day < b.day
+  end)
+  return rows
+end
+
 ---Build the report for one instance's data.
 ---@param namespace string
 ---@param data RA.Telemetry.Data
@@ -128,6 +198,9 @@ function M.build(namespace, data, meta, opts)
         entry.mean_ms = timing.total_ms / timing.n
         entry.min_ms = timing.min_ms
         entry.max_ms = timing.max_ms
+        entry.timing_n = timing.n
+        distribution(entry, timing)
+        entry.days = day_rows(timing.days)
       end
 
       if stats.args then
@@ -566,15 +639,77 @@ function M.markdown(report)
     return out
   end
 
-  out[#out + 1] = "| Function | Calls | Ø ms | Errors |"
-  out[#out + 1] = "| --- | ---: | ---: | ---: |"
+  -- The distribution columns only when some entry has buckets, so a
+  -- counting-only report (or one read from an older file) keeps its table.
+  local any_buckets = false
   for _, e in ipairs(report.entries) do
-    out[#out + 1] = ("| `%s` | %s | %s | %s |"):format(
-      e.key,
-      num(e.calls),
-      e.mean_ms and ("%.2f"):format(e.mean_ms) or "—",
-      e.errors > 0 and num(e.errors) or "—"
-    )
+    any_buckets = any_buckets or e.buckets ~= nil
+  end
+
+  if any_buckets then
+    out[#out + 1] = "| Function | Calls | Ø ms | Max ms | Median | ≥ 1 s | Errors |"
+    out[#out + 1] = "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
+  else
+    out[#out + 1] = "| Function | Calls | Ø ms | Errors |"
+    out[#out + 1] = "| --- | ---: | ---: | ---: |"
+  end
+  for _, e in ipairs(report.entries) do
+    local mean = e.mean_ms and ("%.2f"):format(e.mean_ms) or "—"
+    local errors = e.errors > 0 and num(e.errors) or "—"
+    if any_buckets then
+      out[#out + 1] = ("| `%s` | %s | %s | %s | %s | %s | %s |"):format(
+        e.key,
+        num(e.calls),
+        mean,
+        e.max_ms and ("%.2f"):format(e.max_ms) or "—",
+        e.median_bucket and M.BUCKET_LABELS[e.median_bucket] or "—",
+        (e.outliers or 0) > 0
+            and ("%s (%.0f %% of time)"):format(num(e.outliers), e.outlier_share * 100)
+          or "—",
+        errors
+      )
+    else
+      out[#out + 1] = ("| `%s` | %s | %s | %s |"):format(e.key, num(e.calls), mean, errors)
+    end
+  end
+
+  -- One section per function with outliers: the distribution, the mean
+  -- without them, and the days they fell on. That is what tells a fix that
+  -- moved the mean apart from a few slow calls on a bad day.
+  for _, e in ipairs(report.entries) do
+    if (e.outliers or 0) > 0 then
+      out[#out + 1] = ""
+      out[#out + 1] = ("### `%s` — timing distribution"):format(e.key)
+      out[#out + 1] = ""
+      local parts = {}
+      for i, n in ipairs(e.buckets) do
+        parts[#parts + 1] = ("%s: %s"):format(M.BUCKET_LABELS[i], num(n))
+      end
+      out[#out + 1] = table.concat(parts, " · ")
+      if e.mean_ms_without_outliers then
+        out[#out + 1] = ""
+        out[#out + 1] = ("Ø without calls ≥ 1 s: %.2f ms (with: %.2f ms; outliers are %.0f %% of the time)."):format(
+          e.mean_ms_without_outliers,
+          e.mean_ms,
+          e.outlier_share * 100
+        )
+      end
+      if e.bucketed and e.bucketed < (e.timing_n or e.bucketed) then
+        out[#out + 1] = ""
+        out[#out + 1] = ("_Buckets cover %s of %s timed calls (older data has none)._"):format(
+          num(e.bucketed),
+          num(e.timing_n)
+        )
+      end
+      if e.days then
+        out[#out + 1] = ""
+        out[#out + 1] = "| Day | Timed calls | Ø ms | Max ms |"
+        out[#out + 1] = "| --- | ---: | ---: | ---: |"
+        for _, d in ipairs(e.days) do
+          out[#out + 1] = ("| %s | %s | %.2f | %.2f |"):format(d.day, num(d.n), d.mean_ms, d.max_ms)
+        end
+      end
+    end
   end
 
   -- Argument-profile subsections only for entries that actually have a

@@ -522,6 +522,27 @@ telemetry.flush_all()
 telemetry.stop_all()         -- also `:RATelemetry stop` (bare)
 ```
 
+### Timing by day and outliers
+
+With `timing` on, every function keeps, beside its lifetime `n`/`total_ms`/`min_ms`/`max_ms`:
+
+- `timing.buckets` / `timing.bucket_ms`: calls and summed time per duration bucket
+  (`< 1 ms`, `< 10 ms`, `< 100 ms`, `< 1 s`, `≥ 1 s`).
+- `timing.days["YYYY-MM-DD"] = { n, total_ms, max_ms }`: the timed calls of each day, pruned
+  with the call-count days (`retention_days`).
+
+Both are additive: an older file loads unchanged, and its numbers keep their meaning. The
+per-bucket and per-day sums are rounded to a microsecond. Measured on 45 real namespaces
+(1332 timed functions, ~11 000 function-days): the files grow by about a third (1.41 MB →
+1.87 MB, estimated from the data's own per-day counts).
+
+`report()` entries carry `buckets`, `median_bucket`, `outliers` (calls `≥ 1 s`),
+`outlier_share` (their share of the bucketed time), `mean_ms_without_outliers` and `days`
+(per-day rows, oldest first). The Markdown export adds the columns `Max ms`, `Median` and
+`≥ 1 s`, and one "timing distribution" section per function with outliers: the bucket counts,
+the mean without the outliers, and the days. A re-measurement after a fix can then tell a
+shifted mean from a few slow calls on one day.
+
 ### Report metadata — which branch/version this data came from
 
 A count on its own does not say *when* it is from — 12,000 calls to a
@@ -1415,8 +1436,12 @@ stop with :RATelemetry stop.
   longer `==` the table's current value. `stop()` restores exactly.
 - Day bucketing reads the clock once per flush, not per call, so calls in the
   last flush interval before midnight land in the previous day.
-- Timing reports `min`/`mean`/`max`. No `p95` — that needs a histogram per
-  function, which is a different size/accuracy trade-off than this module makes.
+- Timing reports `min`/`mean`/`max` plus a coarse histogram (see "Timing by
+  day and outliers"). No `p95`: five buckets name the bucket the median call
+  falls in, not a percentile.
+- Buckets and per-day timing exist only for calls recorded since they were
+  introduced. On older data the lifetime `n` covers more calls than the
+  buckets; the Markdown report says so instead of mixing the two.
 - A replacement that merely **keeps our wrapper for a later restore** is not
   counted. `attach` leaves a field alone when the function now in it reaches the
   wrapper through its upvalues (or one level into a captured table), because
