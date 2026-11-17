@@ -1259,6 +1259,34 @@ return function(H)
     H.eq(store.data_path("x"), paths.DIR .. "/telemetry/x.json", "store fallback is the store dir")
   end
 
+  -- The store functions without `opts` use the same directory: before, they
+  -- fell through to `cache.disk`'s own lib.nvim cache root, so `store.clear(ns)`
+  -- without `dir` cleared nothing an instance had flushed.
+  do
+    local paths = require("runtime-analysis.telemetry.paths")
+    local name = ns("store_default_dir")
+    local data = store.empty()
+    data.sessions = 3
+    H.eq(store.save(name, data), true, "save without opts")
+    H.eq(
+      vim.uv.fs_stat(store.data_path(name)) ~= nil,
+      true,
+      "save without opts writes where data_path points"
+    )
+    H.eq(store.load(name, { dir = paths.DIR }).sessions, 3, "load with paths.DIR finds it")
+    H.eq(store.load(name).sessions, 3, "load without opts finds it")
+    H.eq(store.load_readonly(name).sessions, 3, "load_readonly without opts finds it")
+
+    H.eq(store.save_snapshot(name, "s1", data), true, "save_snapshot without opts")
+    H.eq(#store.list_snapshots(name), 1, "the snapshot is in snapshot_dir")
+    H.eq(store.load_snapshot(name, "s1").sessions, 3, "load_snapshot without opts")
+    H.eq(store.delete_snapshot(name, "s1"), true, "delete_snapshot without opts")
+    H.eq(#store.list_snapshots(name), 0, "the snapshot is gone")
+
+    H.eq(store.clear(name), true, "clear without opts")
+    H.eq(store.load_readonly(name, { dir = paths.DIR }), nil, "clear without opts removed it")
+  end
+
   -- -------------------------------------------------------------------------
   -- paths.migrate: the one-time move out of the old cache roots. Moves what
   -- the store dir lacks (files, snapshot dirs, merging into dirs both sides

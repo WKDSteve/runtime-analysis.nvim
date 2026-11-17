@@ -20,6 +20,20 @@ local M = {}
 
 M.VERSION = 1
 
+---`opts` for `cache.disk`, with `dir` defaulting to `paths.dir()`: without it
+---`cache.disk` falls back to its own `stdpath("cache")/lib.nvim/cache`, a
+---different directory from the one `data_path`, `namespaces` and
+---`snapshot_dir` read -- `M.clear(ns)` without `dir` cleared nothing there.
+---@internal
+---@param opts? Lib.Cache.Opts
+---@return Lib.Cache.Opts
+local function disk_opts(opts)
+  if opts and opts.dir then
+    return opts
+  end
+  return vim.tbl_extend("force", opts or {}, { dir = paths.dir() })
+end
+
 --- Everything but these is replaced with `_`. Slashes included: `cache.disk`
 --- supports nested namespaces, but a telemetry namespace is a plugin name, and
 --- allowing separators is exactly how `..` escapes the cache directory.
@@ -99,7 +113,7 @@ end
 ---count that had accumulated before the corruption, with nothing said
 ---about it. A caller that must not do that checks this before merging in.
 function M.load(namespace, opts)
-  local ok, raw, err = pcall(disk.load, M.cache_key(namespace), opts)
+  local ok, raw, err = pcall(disk.load, M.cache_key(namespace), disk_opts(opts))
   if not ok then
     return M.empty(), nil
   end
@@ -125,7 +139,7 @@ end
 ---one distinguishing "no data for this namespace" from "data exists and is
 ---unreadable" (`:RATelemetry status`, `:checkhealth`) now can.
 function M.load_readonly(namespace, opts)
-  local ok, raw, err = pcall(disk.load, M.cache_key(namespace), opts)
+  local ok, raw, err = pcall(disk.load, M.cache_key(namespace), disk_opts(opts))
   if not ok then
     return nil, nil
   end
@@ -157,7 +171,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return boolean ok
 function M.save(namespace, data, opts)
-  local ok, saved = pcall(disk.save, M.cache_key(namespace), data, opts)
+  local ok, saved = pcall(disk.save, M.cache_key(namespace), data, disk_opts(opts))
   return ok and saved == true
 end
 
@@ -165,7 +179,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return boolean ok
 function M.clear(namespace, opts)
-  local ok, cleared = pcall(disk.clear, M.cache_key(namespace), opts)
+  local ok, cleared = pcall(disk.clear, M.cache_key(namespace), disk_opts(opts))
   return ok and cleared ~= false
 end
 
@@ -267,7 +281,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return boolean ok
 function M.save_snapshot(namespace, name, data, opts)
-  local ok, saved = pcall(disk.save, M.snapshot_cache_key(namespace, name), data, opts)
+  local ok, saved = pcall(disk.save, M.snapshot_cache_key(namespace, name), data, disk_opts(opts))
   return ok and saved == true
 end
 
@@ -276,7 +290,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return RA.Telemetry.Data|nil
 function M.load_snapshot(namespace, name, opts)
-  local ok, raw = pcall(disk.load, M.snapshot_cache_key(namespace, name), opts)
+  local ok, raw = pcall(disk.load, M.snapshot_cache_key(namespace, name), disk_opts(opts))
   if not ok or raw == nil then
     return nil
   end
@@ -288,7 +302,7 @@ end
 ---@param opts? Lib.Cache.Opts
 ---@return boolean ok
 function M.delete_snapshot(namespace, name, opts)
-  local ok, cleared = pcall(disk.clear, M.snapshot_cache_key(namespace, name), opts)
+  local ok, cleared = pcall(disk.clear, M.snapshot_cache_key(namespace, name), disk_opts(opts))
   return ok and cleared ~= false
 end
 
