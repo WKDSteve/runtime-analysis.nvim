@@ -144,6 +144,7 @@ local function distribution(entry, timing)
   entry.bucketed = n
   entry.outliers = counts[top]
   entry.outlier_share = total_ms > 0 and outlier_ms / total_ms or 0
+  entry.bucketed_mean_ms = total_ms / n
   if counts[top] > 0 and n > counts[top] then
     entry.mean_ms_without_outliers = (total_ms - outlier_ms) / (n - counts[top])
   end
@@ -690,7 +691,7 @@ function M.markdown(report)
         out[#out + 1] = ""
         out[#out + 1] = ("Ø without calls ≥ 1 s: %.2f ms (with: %.2f ms; outliers are %.0f %% of the time)."):format(
           e.mean_ms_without_outliers,
-          e.mean_ms,
+          e.bucketed_mean_ms,
           e.outlier_share * 100
         )
       end

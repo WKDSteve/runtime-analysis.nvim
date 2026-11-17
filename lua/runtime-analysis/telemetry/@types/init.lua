@@ -145,6 +145,7 @@
 ---@field median_bucket? integer     # index of the bucket holding the median call
 ---@field outliers? integer          # calls >= 1 s
 ---@field outlier_share? number      # share of the bucketed time spent in calls >= 1 s
+---@field bucketed_mean_ms? number     # mean of the bucketed calls (the same calls the outlier figures describe)
 ---@field mean_ms_without_outliers? number
 ---@field days? { day: string, n: integer, mean_ms: number, max_ms: number }[]  # per-day timing, oldest first
 ---@field args? { fingerprint: string, count: number, share: number }[]

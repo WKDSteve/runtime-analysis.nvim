@@ -145,14 +145,21 @@ return function(H)
 
     -- New calls on top: the buckets cover only them, and the section says so.
     t._record("g", nil, 1500, false)
+    t._record("g", nil, 2, false)
     H.ok(t.flush(), "flush on top of old data")
     local data = store.load(namespace, { dir = tmpdir })
-    H.eq(data.functions.g.timing.n, 11, "lifetime count keeps the old calls")
-    same(data.functions.g.timing.buckets, { 0, 0, 0, 0, 1 }, "buckets start with the new calls")
+    H.eq(data.functions.g.timing.n, 12, "lifetime count keeps the old calls")
+    same(data.functions.g.timing.buckets, { 0, 1, 0, 0, 1 }, "buckets start with the new calls")
     md = table.concat(t.markdown(), "\n")
     H.ok(
-      md:find("_Buckets cover 1 of 11 timed calls (older data has none)._", 1, true) ~= nil,
+      md:find("_Buckets cover 2 of 12 timed calls (older data has none)._", 1, true) ~= nil,
       "partial coverage is stated"
+    )
+    -- Lifetime mean is (50 + 1502) / 12; the outlier sentence compares the
+    -- bucketed calls only, so it must not mix in the ten old ones.
+    H.ok(
+      md:find("Ø without calls ≥ 1 s: 2.00 ms (with: 751.00 ms;", 1, true) ~= nil,
+      "outlier sentence compares the same calls"
     )
   end
 
