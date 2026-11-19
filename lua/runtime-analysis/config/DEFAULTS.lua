@@ -17,10 +17,10 @@ M.DEFAULTS = {
   request_filetype = "http",
 
   -- One-time "which CLI tools does this plugin want, and why" popup on
-  -- first setup() after install (via lib.nvim.deps). false disables it for
-  -- this plugin specifically, right here in the spec passed to setup() —
-  -- no vim.g needed. See docs/installation.md.
-  deps_popup = true,
+  -- first setup() after install (via lib.nvim.deps). Opt-in: off by default;
+  -- `deps_popup = true` in the spec passed to setup() turns it on. See
+  -- docs/installation.md.
+  deps_popup = false,
 
   -- How many past requests `:RA history` keeps. A ring, so the file's size
   -- stays a function of how much the plugin is used rather than of how long

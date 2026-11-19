@@ -90,7 +90,7 @@ same as: >lua
   require("runtime-analysis").setup({
     split = "vsplit",           -- default; "split" for a horizontal one
     request_filetype = "http",  -- default
-    deps_popup = true,          -- default
+    deps_popup = false,         -- default (opt-in)
     history_max_entries = 200,  -- default
     history_secret_keys = { ... },  -- see |runtime-analysis-opts.history_secret_keys|
     telemetry = nil,            -- see |runtime-analysis-telemetry|
@@ -112,10 +112,10 @@ opts.request_filetype ~
 
                                                 *runtime-analysis-opts.deps_popup*
 opts.deps_popup ~
-  Type: `boolean`. Default: `true`.
+  Type: `boolean`. Default: `false`.
   The one-time "which CLI tools does this plugin want, and why" popup on
-  the first `setup()` after install, via lib.nvim's `deps` module. `false`
-  disables it for this plugin alone, right here in its own spec.
+  the first `setup()` after install, via lib.nvim's `deps` module. Opt-in; `true`
+  enables it for this plugin alone, right here in its own spec.
 
                                      *runtime-analysis-opts.history_max_entries*
 opts.history_max_entries ~

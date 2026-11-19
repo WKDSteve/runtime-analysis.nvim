@@ -86,4 +86,24 @@ return function(H)
     vim.notify = orig_notify
     ra.setup({})
   end
+
+  -- The dependency popup is opt-in: setup() with no `deps_popup` must not ask
+  -- lib.nvim.deps to show anything; only `deps_popup = true` does.
+  do
+    local real_deps = package.loaded["lib.nvim.deps"]
+    local shown = {}
+    package.loaded["lib.nvim.deps"] = {
+      show_once = function(name)
+        shown[#shown + 1] = name
+      end,
+    }
+    ra.setup({})
+    eq(#shown, 0, "deps_popup: off by default, no popup on setup()")
+    ra.setup({ deps_popup = false })
+    eq(#shown, 0, "deps_popup: false -> no popup")
+    ra.setup({ deps_popup = true })
+    eq(shown[1], "runtime-analysis.nvim", "deps_popup: true -> the popup is asked for")
+    package.loaded["lib.nvim.deps"] = real_deps
+    ra.setup({})
+  end
 end

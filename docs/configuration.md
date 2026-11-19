@@ -8,7 +8,7 @@ which is the single source of truth this page is written from.
 require("runtime-analysis").setup({
   split = "vsplit",             -- default; "split" for a horizontal one
   request_filetype = "http",    -- default
-  deps_popup = true,            -- default
+  deps_popup = false,           -- default (opt-in)
   history_max_entries = 200,    -- default
   history_secret_keys = { ... },-- default list, see below; {} disables
   telemetry = { ... },          -- opt-in; absent by design
@@ -23,7 +23,7 @@ Five, and that is the whole list.
 | --- | --- | --- |
 | `split` | `"vsplit"` | Where the response pane opens relative to the request buffer. `"split"` for a horizontal one. |
 | `request_filetype` | `"http"` | Filetype set on a new `:RA request` buffer. `http` rather than a plugin-specific name, because VS Code's REST Client and IntelliJ's HTTP Client already claim it and this buffer's syntax matches theirs — so existing highlighting for either tool works here unmodified. |
-| `deps_popup` | `true` | The one-time "which CLI tools does this plugin want, and why" popup on the first `setup()` after install. `false` disables it for this plugin specifically, in the spec itself — no `vim.g` needed. See [`installation.md`](installation.md). |
+| `deps_popup` | `false` | Opt-in: the one-time "which CLI tools does this plugin want, and why" popup on the first `setup()` after install. `true` turns it on for this plugin specifically, in the spec itself — no `vim.g` needed. See [`installation.md`](installation.md). |
 | `history_max_entries` | `200` | How many past sends `:RA history` keeps, per project. A ring: the file's size stays a function of how much the plugin is used, not of how long ago it was first started. |
 | `history_secret_keys` | `api_key`, `apikey`, `key`, `token`, `access_token`, `auth`, `secret`, `password`, `sig`, `signature` | Query/fragment parameter names (case-insensitive) whose value `:RA history` stores as `<redacted>`. values made only of `{{var}}` stay; `{}` turns redaction off. See `docs/commands.md`. |
 | `telemetry` | **absent** | Auto-instrument every plugin as it loads. Absent means no auto-instrumentation at all, exactly as if `telemetry.auto()` were never called — a default table would switch it on for everyone who never asked. |

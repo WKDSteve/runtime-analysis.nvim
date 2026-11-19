@@ -114,14 +114,15 @@ degrading to `:messages`/`vim.ui.input`.
 `curl` is declared machine-readably in [`install.json`](install.json), parsed
 by lib.nvim's
 [`deps` module](https://github.com/WKDSteve/lib.nvim/blob/main/lua/lib/nvim/deps/README.md).
-The first `setup()` after installing this plugin shows a one-time popup if it
-is missing — and says that only `:RA send` needs it. `:Lib deps show
-runtime-analysis.nvim` repeats it any time.
+The popup is opt-in (off by default). With `deps_popup = true` the first
+`setup()` after installing this plugin shows a one-time popup if it is
+missing — and says that only `:RA send` needs it. `:Lib deps show
+runtime-analysis.nvim` shows it any time.
 
-Three ways to turn it off, narrowest first:
+lib.nvim's own switches still apply on top, narrowest first:
 
 ```lua
-require("runtime-analysis").setup({ deps_popup = false })   -- this plugin only
+require("runtime-analysis").setup({ deps_popup = true })    -- on, this plugin only (default: off)
 vim.g.lib_nvim_deps_disabled_plugins = { "runtime-analysis.nvim" }
 vim.g.lib_nvim_deps_disable_first_run = true                -- every plugin
 ```
