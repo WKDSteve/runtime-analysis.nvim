@@ -3,6 +3,11 @@
 -- that names an id not listed here. Data: read with an empty environment like a sheet (testing.nvim docs/SHEETS.md).
 -- The list follows docs/FEATURES/ (README.md and its pages), docs/commands.md and
 -- ALL/manual-test-checklists/runtime-analysis.md.
+--
+-- Every functionality has a feature sheet; `testing perf` measures their process starts (curl for the requests, a
+-- child editor for :RA startup profile, the system opener for the HTML dashboard and the flamegraph, as stand-ins).
+-- Spawn sites that are no functionality of their own (health, an unused blocking variant) are named in the task
+-- runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee.
 return {
   {
     id = "runtime-analysis.requests",
