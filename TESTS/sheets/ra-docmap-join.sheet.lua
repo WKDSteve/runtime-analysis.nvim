@@ -1,9 +1,10 @@
 -- Feature sheet: docmap.nvim hands a route over as a request buffer (`require("runtime-analysis").open_request`, the
 -- call docmap's `gs` makes in :DocBrowse Endpoints) and the reader completes and sends it. Automated: the buffer
 -- holds the method and the relative path, not sent; the reader fills in the base URL and :RA send reaches the local
--- server through curl. Invalid input from the other plugin is refused with a message.
+-- server through curl. Malformed lines from the other plugin open the empty template instead.
 return {
   id = "runtime-analysis.docmap-join",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.docmap-join",
   title = "A route from docmap.nvim becomes a request buffer the reader completes and sends",
   sizes = { { rows = 40, cols = 120 } },

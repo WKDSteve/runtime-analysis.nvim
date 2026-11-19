@@ -2,6 +2,7 @@
 -- Automated: before start, start (and a refused second start), a mapping of the user pressed, the report, stop.
 return {
   id = "runtime-analysis.usage",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.usage",
   title = ":RA usage start, report and stop over a pressed keymap of the user",
   sizes = { { rows = 40, cols = 120 } },

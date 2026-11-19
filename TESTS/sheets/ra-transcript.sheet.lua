@@ -4,6 +4,7 @@
 -- removes the file.
 return {
   id = "runtime-analysis.request-transcript",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.request-transcript",
   title = ":RA transcript on and off around a send",
   sizes = { { rows = 40, cols = 120 } },

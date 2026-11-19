@@ -4,6 +4,7 @@
 -- The CLI is started by the sheet itself (it is the cron job / CI side of the feature, never a start of the editor).
 return {
   id = "runtime-analysis.telemetry-offline",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.telemetry-offline",
   title = "A recorded namespace read off disk by a later session and by the headless CLI",
   sizes = { { rows = 40, cols = 120 } },

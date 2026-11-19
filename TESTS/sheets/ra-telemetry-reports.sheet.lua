@@ -5,6 +5,7 @@
 -- `.exe` is stripped by fixtures/windows_stand_in_argv.lua), so no browser opens.
 return {
   id = "runtime-analysis.telemetry-reports",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.telemetry-reports",
   title = ":RATelemetry compare, snapshots, export, startup, cost, the HTML dashboard and the flamegraph",
   sizes = { { rows = 40, cols = 120 } },
@@ -33,6 +34,7 @@ return {
     { lua = [[_G.use_demo(4); _G.forget()]] },
     { keys = ":RATelemetry snapshot demo after<CR>" },
     { expect = [[_G.noted('saved snapshot "after" for demo')]], note = "and a second one later" },
+    { lua = [[_G.forget()]] },
     { keys = ":RATelemetry snapshots demo<CR>" },
     {
       wait = [[_G.seen("before") and _G.seen("after")]],
@@ -40,6 +42,7 @@ return {
       note = ":RATelemetry snapshots demo lists both",
     },
     { keys = "<Esc>" },
+    { lua = [[_G.forget()]] },
     { keys = ":RATelemetry snapshot-compare demo before after<CR>" },
     {
       wait = [[_G.seen("add")]],

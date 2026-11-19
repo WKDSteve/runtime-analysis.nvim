@@ -3,6 +3,7 @@
 -- (`nvim --startuptime`, startup/profile.lua) once and reports its cost per file; an absurd run count is refused.
 return {
   id = "runtime-analysis.startup",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.startup",
   title = ":RA startup probe, start, watch, report and profile",
   sizes = { { rows = 40, cols = 120 } },

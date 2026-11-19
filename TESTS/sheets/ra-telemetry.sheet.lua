@@ -4,6 +4,7 @@
 -- Not here: SetupAll / SetupAllFull / ResetAll against a real configuration (manual).
 return {
   id = "runtime-analysis.telemetry",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.telemetry",
   title = ":RATelemetry start, report, flush, status and stop of a namespace, StartAll and StopAll",
   sizes = { { rows = 40, cols = 120 } },

@@ -4,6 +4,7 @@
 -- shorthand (base64 on the wire) and an `@expect status` that holds.
 return {
   id = "runtime-analysis.request-bodies",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.request-bodies",
   title = "GraphQL, multipart with a local file, Auth: Basic and @expect status, as the server sees them",
   sizes = { { rows = 40, cols = 120 } },

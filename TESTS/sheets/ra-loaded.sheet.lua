@@ -3,6 +3,7 @@
 -- state directory) the snapshot is still there.
 return {
   id = "runtime-analysis.loaded",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.loaded",
   title = ":RA loaded snapshot and snapshots, kept across a restart",
   sizes = { { rows = 40, cols = 120 } },

@@ -3,6 +3,7 @@
 -- result names the faster one and `bench.lines` renders a table with both names.
 return {
   id = "runtime-analysis.bench",
+  task = "runtime-analysis.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
   feature = "runtime-analysis.bench",
   title = "bench.compare times two candidate functions and names the faster one",
   sizes = { { rows = 24, cols = 100 } },
