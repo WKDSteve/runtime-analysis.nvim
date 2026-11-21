@@ -58,8 +58,6 @@ return {
     },
   },
   -- The pipeline is derived (stylua, luacheck, suite, conformance, surface); the steps below join the default profile.
-  -- scripts/gen_map.lua is no step: its --check depends on the sibling checkouts beside the repository (a hosted
-  -- runner has none), and the old workflow's self-healing map commit on main cannot coexist with `land`.
   ci = {
     -- The GitHub workflow, generated: `testing init --workflow=public --force` writes .github/workflows/ci.yml from
     -- this (testing.nvim docs/WORKFLOW-CI.md); the step workflow-in-sync keeps the two together.
@@ -73,9 +71,23 @@ return {
       publish = {
         why = "docmap.nvim, lib.nvim and testing.nvim check out runtime-analysis.nvim at ci-verified",
       },
+      checkouts = {
+        {
+          repo = "WKDSteve/docmap.nvim",
+          ref = "ci-verified",
+          why = "the step map runs docmap's generator (scripts/gen_map.lua finds it in .deps/)",
+        },
+      },
     },
     steps = {
       ["workflow-in-sync"] = { preset = "workflow-in-sync" },
+      -- docs/map/ is committed and the same bytes on every machine (no sibling checkout changes it, see
+      -- scripts/gen_map.lua), so --check is the gate. The worktree of `ci commit` has neither .deps/ nor siblings:
+      -- env names the two checkouts the generator probes for.
+      map = {
+        run = { "nvim", "-n", "-i", "NONE", "--headless", "-l", "scripts/gen_map.lua", "--check" },
+        env = { LIB_NVIM_DIR = "${deps.lib.nvim}", DOCMAP_NVIM_DIR = "${deps.docmap.nvim}" },
+      },
     },
   },
 }

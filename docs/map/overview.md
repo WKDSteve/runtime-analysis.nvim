@@ -73,6 +73,7 @@ flowchart LR
   nlua_runtime_analysis_telemetry_command_lua --> nlua_runtime_analysis_ui_float_lua
   nlua_runtime_analysis_telemetry_lazy_lua --> nlua_runtime_analysis_config_validate_lua
   nlua_runtime_analysis_telemetry_registry_lua --> nlua_runtime_analysis_telemetry_fingerprint_lua
+  nlua_runtime_analysis_telemetry_renderers --> nlua_runtime_analysis_telemetry_report_lua
   nlua_runtime_analysis_telemetry_renderers --> nlua_runtime_analysis_telemetry_report_file_lua
   nlua_runtime_analysis_telemetry_report_lua --> nlua_runtime_analysis_telemetry_fingerprint_lua
   nlua_runtime_analysis_telemetry_report_lua --> nlua_runtime_analysis_telemetry_store_lua
@@ -100,18 +101,10 @@ flowchart LR
 
 ## Drift
 
-0 errors · 8 warnings · 3 info
+0 errors · 0 warnings · 3 info
 
-| Severity | Check | Message |
-|---|---|---|
-| warn | `sibling-reference-missing` | docs/api.md references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | docs/IDEAS.md references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | lua/runtime-analysis/telemetry/README.md references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | docs/FEATURE_LOG.md references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | docs/FEATURES/README.md references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | docs/FEATURES/README.md references 'docmap.nvim/docs/FEATURES_FORMAT.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | lua/runtime-analysis/init.lua references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
-| warn | `sibling-reference-missing` | lua/runtime-analysis/view.lua references 'docmap.nvim/docs/ECOSYSTEM.md', which does not exist in the docmap.nvim checkout |
+No errors or warnings.
+
 
 <details>
 <summary>3 informational findings</summary>

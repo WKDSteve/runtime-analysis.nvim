@@ -9,6 +9,7 @@
 ---   nvim --headless -l scripts/gen_map.lua --check            # verify, write nothing
 ---   nvim --headless -l scripts/gen_map.lua --check --lenient  # fail on staleness only
 ---   nvim --headless -l scripts/gen_map.lua --full             # + LuaLS enrichment
+---   nvim --headless -l scripts/gen_map.lua --siblings         # citations into sibling checkouts, writes nothing
 ---
 --- Everything above the options table at the bottom is generic, copied
 --- verbatim from docmap.nvim's own copy of this file — see docs/REUSE.md
@@ -70,37 +71,47 @@ end
 ensure("lib.nvim.fs.read", "lib.nvim")
 ensure("docmap.core.cli", "docmap.nvim")
 
--- Sibling checkouts, for `sibling-reference-missing`. Relative to `root`, so
--- the declaration stays true on every machine and simply finds nothing on CI,
--- where no sibling is checked out -- which is silence, not a finding.
+-- `--siblings` is this script's own flag, not docmap's: it is taken out of the
+-- argv before docmap sees the rest.
+local siblings_mode = false
+local argv = {}
+for _, a in ipairs(_G.arg or {}) do
+  if a == "--siblings" then
+    siblings_mode = true
+  else
+    argv[#argv + 1] = a
+  end
+end
+
+-- The sibling repositories this tree links to or cites. `name` is the
+-- repository *directory* name a doc citation uses, which is not the module
+-- prefix the entry is keyed by: `docmap.nvim` against a `docmap` key.
 --
--- `name` is the repository *directory* name a doc citation uses, which is not
--- the module prefix the entry is keyed by: `docmap.nvim` against a
--- `docmap` key. This repository is the reason the check exists -- it
--- carried nine dead `docs/ECOSYSTEM.md` citations, a path that only exists in
--- docmap.nvim.
+-- **No `local_path` in the committed map.** A declared checkout changes the
+-- artifact itself (the link shape `a.lua` against `a/init.lua`, and the
+-- `sibling-reference-missing` findings in the drift section), so the map a
+-- machine with siblings wrote differed from the one a worktree without them
+-- wrote, and `--check` was red on one of the two whatever was committed
+-- (docmap.nvim's core/external_repos.lua header). Without `local_path` the map
+-- is the same bytes everywhere, and `--check` can be a pipeline step.
 local siblings = {
-  ["lib.nvim"] = {
-    repo = "WKDSteve/lib.nvim",
-    name = "lib.nvim",
-    local_path = "../lib.nvim",
-  },
-  docmap = {
-    repo = "WKDSteve/docmap.nvim",
-    name = "docmap.nvim",
-    local_path = "../docmap.nvim",
-  },
-  mdview = {
-    repo = "WKDSteve/mdview.nvim",
-    name = "mdview.nvim",
-    local_path = "../mdview.nvim",
-  },
-  ["docmap-desktop"] = {
-    repo = "WKDSteve/docmap-desktop",
-    name = "docmap-desktop",
-    local_path = "../docmap-desktop",
-  },
+  ["lib.nvim"] = { repo = "WKDSteve/lib.nvim", name = "lib.nvim" },
+  docmap = { repo = "WKDSteve/docmap.nvim", name = "docmap.nvim" },
+  mdview = { repo = "WKDSteve/mdview.nvim", name = "mdview.nvim" },
+  ["docmap-desktop"] = { repo = "WKDSteve/docmap-desktop", name = "docmap-desktop" },
 }
+
+-- `--siblings`: the citations into sibling repositories, checked against their
+-- checkouts (`<NAME>_DIR`, else `../<name>`). This repository is the reason the
+-- check exists -- it carried nine dead `docs/ECOSYSTEM.md` citations, a path
+-- that only exists in docmap.nvim. Writes nothing.
+local env_var = require("docmap.core.external_repos").env_var
+if siblings_mode then
+  for _, entry in pairs(siblings) do
+    local named = os.getenv(env_var(entry))
+    entry.local_path = (named and named ~= "") and named or ("../" .. entry.name)
+  end
+end
 
 local opts = require("docmap.config").build(root, {
   source = "lua/runtime-analysis",
@@ -111,6 +122,36 @@ local opts = require("docmap.config").build(root, {
   external_repos = siblings,
 })
 
-local code = require("docmap.core.cli").run(opts, _G.arg or {})
+if not siblings_mode then
+  vim.cmd("cq " .. require("docmap.core.cli").run(opts, argv))
+  return
+end
 
-vim.cmd("cq " .. code)
+local names = vim.tbl_keys(siblings)
+table.sort(names)
+for _, key in ipairs(names) do
+  local entry = siblings[key]
+  local path = entry.local_path:gsub("\\", "/")
+  local dir = (path:match("^%a:/") or path:sub(1, 1) == "/") and path or (root .. "/" .. path)
+  if vim.fn.isdirectory(dir) == 0 then
+    io.stdout:write(
+      ("n/a  %s: no checkout at %s (set %s)\n"):format(entry.name, entry.local_path, env_var(entry))
+    )
+  end
+end
+local _, findings = require("docmap").scan_full(opts)
+local missing = 0
+for _, f in ipairs(findings) do
+  if f.check == "sibling-reference-missing" then
+    missing = missing + 1
+    io.stdout:write(
+      ("%s: %s does not exist in the %s checkout\n"):format(
+        f.params.file,
+        f.params.target,
+        f.params.repo
+      )
+    )
+  end
+end
+io.stdout:write(("gen_map --siblings: %d missing sibling reference(s)\n"):format(missing))
+vim.cmd("cq " .. (missing > 0 and 1 or 0))

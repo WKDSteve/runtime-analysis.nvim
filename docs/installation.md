@@ -139,10 +139,14 @@ plugin.
 ```sh
 nvim --headless -l scripts/gen_map.lua           # regenerate
 nvim --headless -l scripts/gen_map.lua --check   # verify, write nothing
+nvim --headless -l scripts/gen_map.lua --siblings # citations into sibling repos, write nothing
 ```
 
-`--check` is the CI gate (`.github/workflows/ci.yml`'s `map` job): it fails
-loudly on a stale map rather than letting one rot on `main`.
+`--check` is the CI gate (the `map` step of the pipeline): it fails
+loudly on a stale map rather than letting one rot on `main`. The map is the
+same bytes on every machine: it does not depend on which sibling repositories
+are checked out beside this one. Checking the citations into those siblings
+(`docmap.nvim/docs/...`) is `--siblings`, against `../<name>` or `<NAME>_DIR`.
 `git config core.hooksPath scripts/hooks` installs the same check as a local
 pre-commit hook.
 
