@@ -543,6 +543,12 @@ per-bucket and per-day sums are rounded to a microsecond. Measured on 45 real na
 the mean without the outliers, and the days. A re-measurement after a fix can then tell a
 shifted mean from a few slow calls on one day.
 
+The terminal view (`:RATelemetry`) and the HTML dashboard show the same: `MEDIAN` and `≥ 1 S`
+columns, in the dashboard also `Max` and, in a row's detail, the mean without the outliers. With
+`since = "7d"` the mean and max come from the `timing.days` rows inside the window; the buckets
+are lifetime-only and are left out of a windowed report. A function with no per-day timing (older
+file) keeps its lifetime mean and max.
+
 ### Report metadata — which branch/version this data came from
 
 A count on its own does not say *when* it is from — 12,000 calls to a

@@ -188,5 +188,72 @@ return function(H)
     H.ok(data.functions.f.timing.days[today] ~= nil, "today's timing stays")
   end
 
+  -- -------------------------------------------------------------------------
+  -- terminal view, HTML dashboard and a since window
+  -- -------------------------------------------------------------------------
+  do
+    local today = store.today()
+    local old_day = os.date("%Y-%m-%d", os.time() - 20 * 86400)
+    local data = store.empty()
+    data.days[today] = { f = 2, legacy = 4 }
+    data.days[old_day] = { f = 1 }
+    data.functions.f = {
+      calls = 3,
+      timing = {
+        n = 3,
+        total_ms = 3014,
+        min_ms = 2,
+        max_ms = 3000,
+        buckets = { 0, 2, 0, 0, 1 },
+        bucket_ms = { 0, 14, 0, 0, 3000 },
+        days = { [today] = { 2, 14, 12 }, [old_day] = { 1, 3000, 3000 } },
+      },
+    }
+    data.functions.legacy = {
+      calls = 4,
+      timing = { n = 4, total_ms = 40, min_ms = 5, max_ms = 20 },
+    }
+    local meta = { running = true, wrapped = 2, modes = {} }
+
+    -- lifetime: median and outliers in the terminal table
+    local life = report.build("v", data, meta, {})
+    local text = table.concat(report.lines(life), "\n")
+    H.ok(text:find("MEDIAN", 1, true) ~= nil, "terminal table has a MEDIAN column")
+    H.ok(text:find("≥ 1 S", 1, true) ~= nil, "terminal table has an outlier column")
+    H.ok(
+      text:find("1 (100 %)", 1, true) ~= nil or text:find("(100 %)", 1, true) ~= nil,
+      "outlier cell"
+    )
+
+    -- window: mean and max come from timing.days, not the lifetime
+    local win = report.build("v", data, meta, { since = "7d" })
+    local f, legacy
+    for _, x in ipairs(win.entries) do
+      if x.key == "f" then
+        f = x
+      elseif x.key == "legacy" then
+        legacy = x
+      end
+    end
+    close(f.mean_ms, 7, "windowed mean is from the days in the window")
+    close(f.max_ms, 12, "windowed max ignores the old day's outlier")
+    H.eq(f.outliers, nil, "lifetime buckets are not mixed into a window")
+    close(legacy.mean_ms, 10, "no per-day timing: lifetime mean stays")
+    close(legacy.max_ms, 20, "no per-day timing: lifetime max stays")
+    close(life.entries[1].mean_ms ~= nil and (function()
+      for _, x in ipairs(life.entries) do
+        if x.key == "f" then
+          return x.mean_ms
+        end
+      end
+    end)() or 0, 3014 / 3, "lifetime mean unchanged without since")
+
+    -- HTML dashboard carries the distribution
+    local page = require("runtime-analysis.telemetry.renderers.html").render({ life })
+    H.ok(page:find("data-sort='median'", 1, true) ~= nil, "dashboard has a Median column")
+    H.ok(page:find("data-sort='outliers'", 1, true) ~= nil, "dashboard has an outlier column")
+    H.ok(page:find('"median":"< 10 ms"', 1, true) ~= nil, "row data names the median bucket")
+  end
+
   vim.fn.delete(tmpdir, "rf")
 end

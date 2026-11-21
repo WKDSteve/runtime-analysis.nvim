@@ -38,6 +38,7 @@ local M = {}
 -- the comment near the embedded `JS` string below refers to — that one is a
 -- client-side JavaScript function baked into that string, not Lua.
 local esc = require("lib.lua.strings.encoding").html_escape
+local report_mod = require("runtime-analysis.telemetry.report")
 
 -- Same design tokens as docmap.nvim's own `core/render/html.lua` —
 -- see this module's own doc-comment for why they are copied rather than
@@ -154,6 +155,11 @@ local function rows_for(report)
       calls = e.calls,
       errors = e.errors,
       mean_ms = e.mean_ms,
+      max_ms = e.max_ms,
+      median = e.median_bucket and report_mod.BUCKET_LABELS[e.median_bucket] or nil,
+      outliers = (e.outliers or 0) > 0 and e.outliers or nil,
+      outlier_share = (e.outliers or 0) > 0 and e.outlier_share or nil,
+      mean_without_outliers = e.mean_ms_without_outliers,
       top_arg = top_arg and ("%3.0f%%  %s"):format(top_arg.share * 100, top_arg.fingerprint) or nil,
       top_caller = top_caller
           and ("%3.0f%%  %s"):format(top_caller.share * 100, top_caller.fingerprint)
@@ -226,10 +232,13 @@ local JS = [[
       html.push('<td class="num">' + fmtNum(r.calls) + '</td>');
       html.push('<td class="num">' + (r.errors > 0 ? '<span class="bd err">' + fmtNum(r.errors) + '</span>' : '') + '</td>');
       html.push('<td class="num">' + (r.mean_ms ? r.mean_ms.toFixed(2) + ' ms' : '') + '</td>');
+      html.push('<td class="num">' + (r.max_ms ? r.max_ms.toFixed(2) + ' ms' : '') + '</td>');
+      html.push('<td class="num">' + escHtml(r.median || '') + '</td>');
+      html.push('<td class="num">' + (r.outliers ? fmtNum(r.outliers) + ' (' + Math.round(r.outlier_share * 100) + ' %)' : '') + '</td>');
       html.push('<td class="fp">' + escHtml(r.top_arg || '') + (r.hint ? ' <span class="bd hint">hint</span>' : '') + '</td>');
       html.push('<td class="fp">' + escHtml(r.top_caller || '') + '</td>');
       html.push('</tr>');
-      html.push('<tr class="detailrow" data-i="' + i + '" style="display:none"><td colspan="6" class="detail">' + detailHtml(r) + '</td></tr>');
+      html.push('<tr class="detailrow" data-i="' + i + '" style="display:none"><td colspan="9" class="detail">' + detailHtml(r) + '</td></tr>');
     });
     tbody.innerHTML = html.join("");
 
@@ -245,6 +254,7 @@ local JS = [[
   function detailHtml(r){
     var out = [];
     if (r.args_html) out.push('<div class="sec">arguments</div><ul>' + r.args_html + '</ul>');
+    if (r.mean_without_outliers !== undefined && r.mean_without_outliers !== null) out.push('<div class="sec">without calls &ge; 1 s</div><div>mean ' + r.mean_without_outliers.toFixed(2) + ' ms (with: ' + r.mean_ms.toFixed(2) + ' ms; outliers are ' + Math.round(r.outlier_share * 100) + ' % of the time)</div>');
     if (r.hint) out.push('<div class="hint">ⓘ ' + escHtml(r.hint) + '</div>');
     if (r.error_fp_html) out.push('<div class="sec">error fingerprints</div><ul>' + r.error_fp_html + '</ul>');
     if (r.callers_html) out.push('<div class="sec">callers</div><ul>' + r.callers_html + '</ul>');
@@ -322,6 +332,9 @@ function M.render(reports)
     "<th data-sort='calls' class='sorted'>Calls</th>",
     "<th data-sort='errors'>Errors</th>",
     "<th data-sort='mean_ms'>Mean</th>",
+    "<th data-sort='max_ms'>Max</th>",
+    "<th data-sort='median'>Median</th>",
+    "<th data-sort='outliers'>&ge; 1 s</th>",
     "<th data-sort='top_arg'>Top argument</th>",
     "<th data-sort='top_caller'>Top caller</th>",
     "</tr></thead><tbody id='tbody'></tbody></table>",

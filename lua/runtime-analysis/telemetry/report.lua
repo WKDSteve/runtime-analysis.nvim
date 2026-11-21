@@ -176,6 +176,33 @@ local function day_rows(timing_days)
   return rows
 end
 
+---Mean and max of the timed calls on the last `days` days, from
+---`timing.days`. nil when the function has no per-day timing or none of it
+---falls in the window (the caller then keeps the lifetime numbers).
+---@internal
+---@param timing_days table<string, number[]>|nil
+---@param days integer
+---@return { n: integer, mean_ms: number, max_ms: number }|nil
+local function window_timing(timing_days, days)
+  if type(timing_days) ~= "table" then
+    return nil
+  end
+  local cutoff = os.date("%Y-%m-%d", os.time() - days * 86400)
+  local n, total, max = 0, 0, 0
+  for day, d in pairs(timing_days) do
+    local dn = type(d) == "table" and tonumber(d[1]) or 0
+    if day >= cutoff and dn > 0 then
+      n = n + dn
+      total = total + (tonumber(d[2]) or 0)
+      max = math.max(max, tonumber(d[3]) or 0)
+    end
+  end
+  if n == 0 then
+    return nil
+  end
+  return { n = n, mean_ms = total / n, max_ms = max }
+end
+
 ---Build the report for one instance's data.
 ---@param namespace string
 ---@param data RA.Telemetry.Data
@@ -200,7 +227,21 @@ function M.build(namespace, data, meta, opts)
         entry.min_ms = timing.min_ms
         entry.max_ms = timing.max_ms
         entry.timing_n = timing.n
-        distribution(entry, timing)
+        local win = days and window_timing(timing.days, days) or nil
+        if win then
+          -- A window computes its mean and max from the days it covers, not
+          -- from the lifetime. The buckets are lifetime-only, so they are
+          -- left out here rather than mixed with a windowed mean.
+          entry.mean_ms = win.mean_ms
+          entry.max_ms = win.max_ms
+          entry.min_ms = nil
+          entry.timing_n = win.n
+          entry.windowed_timing = true
+        else
+          -- No per-day timing (older file, or nothing timed in the window):
+          -- the lifetime numbers stand in, as before.
+          distribution(entry, timing)
+        end
         entry.days = day_rows(timing.days)
       end
 
@@ -497,21 +538,29 @@ function M.lines(report, opts)
   -- Which optional columns this particular report has anything to put in.
   -- A counting-only namespace rendering an empty Ø MS column, or a column of
   -- "—" under ERRORS, is a third of the table's width spent saying "no".
-  local any_timing, any_errors = false, false
+  local any_timing, any_errors, any_dist = false, false, false
   for _, e in ipairs(report.entries) do
+    any_dist = any_dist or e.median_bucket ~= nil
     any_timing = any_timing or e.mean_ms ~= nil
     any_errors = any_errors or (e.errors or 0) > 0
   end
 
-  local keys, calls, avgs, maxes, errs = {}, {}, {}, {}, {}
+  local keys, calls, avgs, maxes, errs, meds, outs = {}, {}, {}, {}, {}, {}, {}
   local key_w, calls_w = #"FUNCTION", #"CALLS"
   local avg_w, max_w, err_w = #"Ø MS", #"MAX MS", #"ERRORS"
+  local med_w, out_w = #"MEDIAN", #"≥ 1 S"
   for i, e in ipairs(report.entries) do
     keys[i] = elide(e.key, MAX_KEY_W)
     calls[i] = num(e.calls)
     avgs[i] = e.mean_ms and ("%.2f"):format(e.mean_ms) or "—"
     maxes[i] = e.max_ms and ("%.2f"):format(e.max_ms) or "—"
     errs[i] = (e.errors or 0) > 0 and num(e.errors) or "—"
+    meds[i] = e.median_bucket and M.BUCKET_LABELS[e.median_bucket] or "—"
+    outs[i] = (e.outliers or 0) > 0
+        and ("%s (%.0f %%)"):format(num(e.outliers), e.outlier_share * 100)
+      or "—"
+    med_w = math.max(med_w, vim.fn.strdisplaywidth(meds[i]))
+    out_w = math.max(out_w, vim.fn.strdisplaywidth(outs[i]))
 
     key_w = math.max(key_w, vim.fn.strdisplaywidth(keys[i]))
     calls_w = math.max(calls_w, #calls[i])
@@ -528,11 +577,15 @@ function M.lines(report, opts)
   ---@param max string
   ---@param err string
   ---@return string
-  local function row(key, call, avg, max, err)
+  local function row(key, call, avg, max, err, med, outl)
     local cells = { "  " .. ljust(key, key_w), rjust(call, calls_w) }
     if any_timing then
       cells[#cells + 1] = rjust(avg, avg_w)
       cells[#cells + 1] = rjust(max, max_w)
+    end
+    if any_dist then
+      cells[#cells + 1] = rjust(med or "", med_w)
+      cells[#cells + 1] = rjust(outl or "", out_w)
     end
     if any_errors then
       cells[#cells + 1] = rjust(err, err_w)
@@ -540,7 +593,7 @@ function M.lines(report, opts)
     return join_cells(cells)
   end
 
-  local header = row("FUNCTION", "CALLS", "Ø MS", "MAX MS", "ERRORS")
+  local header = row("FUNCTION", "CALLS", "Ø MS", "MAX MS", "ERRORS", "MEDIAN", "≥ 1 S")
   out[#out + 1] = header
   -- A rule under the headings, not `=`: `telemetry_spec.lua` asserts a report
   -- with no `Options.info` renders no `=` anywhere, which is how it tells an
@@ -549,7 +602,7 @@ function M.lines(report, opts)
 
   for i, e in ipairs(report.entries) do
     local before = #out
-    out[#out + 1] = row(keys[i], calls[i], avgs[i], maxes[i], errs[i])
+    out[#out + 1] = row(keys[i], calls[i], avgs[i], maxes[i], errs[i], meds[i], outs[i])
 
     if e.args then
       push_fingerprints(
