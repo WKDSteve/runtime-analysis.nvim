@@ -285,11 +285,7 @@ end
 ---whole point is producing something safe to paste into any real shell or
 ---share verbatim in a doc.
 ---@internal
----@param s string
----@return string
-local function shq(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
+local shq = require("lib.nvim.cross.shell_quote.single")
 
 ---@internal
 ---@param headers table<string, string>
